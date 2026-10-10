@@ -75,6 +75,6 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 - [x] Phase 1 – EDA
 - [x] Phase 2 – Training and evaluation pipeline
 - [x] Phase 3 – Experiments
-- [ ] Phase 4 – Threshold and explainability (run complete, awaiting approval)
+- [x] Phase 4 – Threshold and explainability
 - [ ] Phase 5 – API, app, Docker
 - [ ] Phase 6 – CI, deployment, documentation

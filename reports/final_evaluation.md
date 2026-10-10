@@ -12,13 +12,16 @@
   fraud cases, part is that the test period is simply harder: all four models lose 0.07 to
   0.13 PR-AUC from validation to test. The remaining cost is dominated by a few large
   missed frauds; the largest one alone is €1,097 of the €2,722.
-- **The selected model is not better than the simpler alternatives on test.** XGBoost with
+- **XGBoost with class weights performed equally well on test.** The selected model is
+  kept because the selection rule was fixed in advance, not because it won: XGBoost with
   class weights has the same PR-AUC (0.762 against 0.758, difference -0.003
   [-0.020, +0.012]) and is €139 cheaper [€90, €198], because the selected model raises 27
   more false alarms to catch one more fraud. The MLP is level as well (PR-AUC 0.767). The
   four models are within €263 of each other in cost. These comparisons were made after
   selection and do not change it; they confirm the Phase 3 finding that the top
-  configurations are tied.
+  configurations are tied. This is consistent with the thesis finding that oversampling
+  mainly shifts the decision threshold and does not improve the ranking: against class
+  weights, oversampling bought nothing on test.
 - **Doing something about the imbalance matters for ranking, not much for cost.** XGBoost
   without resampling has a much lower test PR-AUC (0.539) but nearly the same cost
   (€2,705) once it has its own threshold: under this cost model a handful of large frauds
@@ -69,8 +72,13 @@ and one seed.
   day 2, while the fraud rate is highest at night. The threshold and all reported results
   are for those hours; the time-of-day features cannot be checked at night at all.
 - **About 50 fraud cases per evaluation split** (55 in validation, 52 in test). Every
-  interval is wide: test savings between 23 % and 86 %, recall between 0.63 and 0.87. The
-  threshold in particular is not well determined.
+  interval is wide: test savings between 23 % and 86 %, recall between 0.63 and 0.87.
+- **The threshold is unstable.** Over bootstrap resamples of validation the cost-optimal
+  threshold ranges from 0.018 to 0.97. The cost curve is flat around its minimum, and with
+  55 fraud cases a single large fraud moving above or below the threshold decides where
+  the minimum is. On test, 0.005 would have been €429 cheaper than the chosen 0.018.
+  Practical consequence: the threshold must be re-validated on fresh data before anyone
+  relies on it, and again whenever the review cost or the mix of transactions changes.
 - **PCA-anonymised features.** V1 to V28 have no business meaning, so the SHAP
   explanations show which components drive a score but not why in terms a fraud analyst
   could act on.
