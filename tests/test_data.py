@@ -243,3 +243,52 @@ def test_fold_summary_reports_fraud_per_fold(transactions: pd.DataFrame) -> None
         assert row["train_rows"] == len(train_idx)
         assert row["val_fraud"] == transactions[TARGET_COLUMN].iloc[val_idx].sum()
     assert (summary["val_fraud"] >= 1).all()
+
+
+@pytest.fixture
+def csv_with_early_and_late_duplicates(transactions: pd.DataFrame, tmp_path: Path) -> Path:
+    """Synthetic rows plus exact copies of two early rows and three late rows."""
+    ordered = transactions.sort_values("Time")
+    copies = pd.concat([ordered.iloc[[5, 9]], ordered.iloc[[-4, -3, -3]]])
+    path = tmp_path / "creditcard.csv"
+    pd.concat([transactions, copies]).sample(frac=1.0, random_state=1).to_csv(path, index=False)
+    return path
+
+
+def test_test_split_with_duplicates_requires_explicit_permission(raw_csv: Path) -> None:
+    with pytest.raises(data.HeldOutTestSetError, match="allow_test=True"):
+        data.load_test_with_duplicates(path=raw_csv, expected_rows=None)
+
+
+def test_test_split_with_duplicates_returns_the_duplicates_of_its_period(
+    csv_with_early_and_late_duplicates: Path,
+) -> None:
+    path = csv_with_early_and_late_duplicates
+    test, duplicates = data.load_test_with_duplicates(
+        allow_test=True, path=path, expected_rows=None
+    )
+    pd.testing.assert_frame_equal(
+        test, data.load_test(allow_test=True, path=path, expected_rows=None)
+    )
+    assert len(duplicates) == 3  # the copies of the two early rows belong to training
+    assert duplicates["Time"].min() >= test["Time"].min()
+    assert data.duplicate_mask(pd.concat([test, duplicates])).sum() == 3
+    assert len(data.dropped_duplicates(path, expected_rows=None)) == 5
+
+
+def test_stratified_random_split_keeps_the_fraud_rate_and_every_row(
+    transactions: pd.DataFrame,
+) -> None:
+    splits = data.stratified_random_split(transactions)
+    assert sum(len(part) for part in splits.values()) == len(transactions)
+    indices = [set(part.index) for part in splits.values()]
+    assert not (indices[0] & indices[1] or indices[0] & indices[2] or indices[1] & indices[2])
+    assert len(splits["train"]) == pytest.approx(0.70 * len(transactions), abs=2)
+    assert len(splits["val"]) == pytest.approx(0.15 * len(transactions), abs=2)
+    rate = transactions[TARGET_COLUMN].mean()
+    for part in splits.values():
+        assert part[TARGET_COLUMN].mean() == pytest.approx(rate, abs=0.004)
+    # Unlike the primary split, it mixes early and late transactions.
+    assert splits["test"]["Time"].min() < splits["train"]["Time"].max()
+    again = data.stratified_random_split(transactions)
+    pd.testing.assert_frame_equal(splits["test"], again["test"])

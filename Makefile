@@ -3,7 +3,7 @@
 
 NOTEBOOKS := $(wildcard notebooks/*.ipynb)
 
-.PHONY: help install lock data lint format test notebook train-baseline experiments api app
+.PHONY: help install lock data lint format test notebook train-baseline experiments evaluate api app
 
 help:
 	@echo "install         install dependencies exactly as pinned in uv.lock"
@@ -15,6 +15,7 @@ help:
 	@echo "notebook        execute the notebooks top to bottom"
 	@echo "train-baseline  train the baseline and write its row to reports/results.csv"
 	@echo "experiments     run experiment stages 1-3 and the report (finished runs are skipped)"
+	@echo "evaluate        final evaluation: threshold, TEST SPLIT (logged), SHAP, report"
 	@echo "api, app: later phases"
 
 # --locked fails if uv.lock is out of date with pyproject.toml instead of silently re-resolving.
@@ -54,6 +55,13 @@ train-baseline:
 # Runtime estimate for a stage: uv run python -m fraud.experiments --stage 1 --estimate
 experiments:
 	uv run --locked python -m fraud.experiments
+
+# Phase 4. Loads the held-out test split and appends to reports/test_set_access.log.
+# To check code changes without touching the test split:
+#   uv run python -m fraud.final_eval --dry-run some/scratch/dir
+# To rewrite the report from the saved metrics: uv run python -m fraud.final_eval --render-only
+evaluate:
+	uv run --locked python -m fraud.final_eval
 
 api:
 	@echo "api: not implemented yet (Phase 5)"

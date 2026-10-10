@@ -19,6 +19,9 @@ mlruns/
 mlartifacts/
 models/*
 !models/.gitkeep
+# The final model is small (0.2 MB) and is served by the API, so it is committed.
+!models/final_pipeline.joblib
+!models/final_config.json
 *.zip
 
 # Secrets

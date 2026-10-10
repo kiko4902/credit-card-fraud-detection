@@ -20,6 +20,15 @@ VAL_SCORES_DIR: Path = PROCESSED_DIR / "val_scores"
 RESAMPLE_CACHE_DIR: Path = PROCESSED_DIR / "resample_cache"
 FINAL_MODEL_NAME: str = "final_pipeline.joblib"
 FINAL_CONFIG_NAME: str = "final_config.json"
+# Version of the saved model artifact; increase it whenever the model is retrained.
+MODEL_VERSION: str = "1.0.0"
+# Phase 4: final evaluation.
+FINAL_EVALUATION_MD: Path = REPORTS_DIR / "final_evaluation.md"
+FINAL_METRICS_JSON: Path = REPORTS_DIR / "final_metrics.json"
+# Every load of the held-out test split is appended to this file.
+TEST_ACCESS_LOG: Path = REPORTS_DIR / "test_set_access.log"
+# Small sample of explained test transactions for the Streamlit app.
+APP_SAMPLE_CSV: Path = PROJECT_ROOT / "app" / "data" / "explained_sample.csv"
 
 # --- Reproducibility ---------------------------------------------------------
 RANDOM_SEED: int = 42
@@ -79,3 +88,19 @@ class ExperimentPaths:
     figures_dir: Path = FIGURES_DIR
     summary: Path = EXPERIMENTS_SUMMARY
     models_dir: Path = MODELS_DIR
+
+
+@dataclass(frozen=True)
+class EvaluationPaths:
+    """Where the final evaluation reads and writes; a dry run points the outputs elsewhere."""
+
+    results: Path = RESULTS_CSV
+    scores_dir: Path = VAL_SCORES_DIR
+    models_dir: Path = MODELS_DIR
+    figures_dir: Path = FIGURES_DIR
+    report: Path = FINAL_EVALUATION_MD
+    metrics: Path = FINAL_METRICS_JSON
+    access_log: Path = TEST_ACCESS_LOG
+    sample: Path = APP_SAMPLE_CSV
+    # The final config is read from ``models_dir`` and the updated one written here.
+    config_out: Path = MODELS_DIR / FINAL_CONFIG_NAME

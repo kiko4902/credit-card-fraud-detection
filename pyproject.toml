@@ -44,6 +44,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 [tool.ruff.lint.per-file-ignores]
 # Long table headers and sentences of the generated summary.
 "src/fraud/report.py" = ["E501"]
+"src/fraud/final_eval.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

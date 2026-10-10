@@ -73,6 +73,17 @@ _To be written after reviewing the results below._
 {GENERATED_END}
 """
 OTHER_COLOR = "#b5b3ab"
+# Keys of the final config that the final evaluation (Phase 4) adds. Rebuilding the
+# Phase 3 report keeps them as long as the selected configuration is the same.
+PHASE4_KEYS = [
+    "model_version",
+    "threshold",
+    "decision",
+    "cost_model",
+    "training_data",
+    "metrics",
+    "output",
+]
 
 
 # --- Helpers ---------------------------------------------------------------------------
@@ -687,9 +698,12 @@ def save_final_model(
         "model_file": FINAL_MODEL_NAME,
         "model_file_bytes": model_path.stat().st_size,
     }
-    (models_dir / FINAL_CONFIG_NAME).write_text(
-        json.dumps(config, indent=2) + "\n", encoding="utf-8", newline="\n"
-    )
+    config_path = models_dir / FINAL_CONFIG_NAME
+    if config_path.exists():
+        previous = json.loads(config_path.read_text(encoding="utf-8"))
+        if previous.get("config_id") == config["config_id"]:
+            config.update({key: previous[key] for key in PHASE4_KEYS if key in previous})
+    config_path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8", newline="\n")
     return config
 
 

@@ -22,7 +22,7 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 docs/PLAN.md          project plan            docs/images/     README images
 data/raw|processed/   gitignored              notebooks/       01_eda.ipynb (Phase 1)
 src/fraud/            config, data, features, samplers, models, cache, evaluate, train,
-                      selection, experiments, report, plotting (+ explain later)
+                      selection, experiments, report, threshold, explain, final_eval, plotting
 models/               final model artifact    reports/         results.csv, figures/
 app/                  api.py, streamlit_app.py
 tests/                pytest, synthetic fixtures in conftest.py
@@ -41,8 +41,7 @@ tests/                pytest, synthetic fixtures in conftest.py
 - Primary metric is PR-AUC; never report accuracy as a headline number.
 - English for code, comments, docs and commit messages. Plain commit messages, no
   attribution lines (`.claude/settings.json` disables them; keep it that way).
-- Large or generated files are gitignored: `data/`, `models/*`, `mlruns/`. Un-ignore a
-  specific small model artifact explicitly if it should be committed.
+- Gitignored: `data/`, `mlruns/`, `models/*` except the final pipeline and its config.
 - LF line endings (`.gitattributes`). The Makefile must work in Git Bash on Windows and on
   the Linux CI runner: no PowerShell/cmd syntax, no OS-specific paths.
 - Never run destructive commands (`rm -rf` on data, git history rewrites, deleting files
@@ -67,6 +66,7 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 | `make notebook` | execute notebooks in place, outputs kept (needs data; never run in CI) |
 | `make train-baseline` | logistic regression, no resampling; upserts its row in `reports/results.csv` |
 | `make experiments` | stages 1-3 + report, resumable (design: PLAN.md §6, rule: §14) |
+| `make evaluate` | Phase 4: threshold, the one test-set evaluation (logged), SHAP, report |
 | `make api`, `app` | not implemented yet |
 
 ## Current status

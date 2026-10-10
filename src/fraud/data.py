@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import TimeSeriesSplit, train_test_split
 
 from fraud.config import (
     CV_N_SPLITS,
@@ -20,6 +20,7 @@ from fraud.config import (
     EXPECTED_ROWS,
     KAGGLE_DATASET,
     MIN_FRAUD_PER_FOLD,
+    RANDOM_SEED,
     RAW_CSV,
     TARGET_COLUMN,
     TIME_COLUMN,
@@ -189,6 +190,46 @@ def load_train_val(
     return splits["train"], splits["val"]
 
 
+def dropped_duplicates(
+    path: Path = RAW_CSV, expected_rows: int | None = EXPECTED_ROWS
+) -> pd.DataFrame:
+    """The exact duplicates that deduplication removes (every repeat after the first row)."""
+    df = load_raw(path, expected_rows=expected_rows)
+    return df[duplicate_mask(df)].sort_values(TIME_COLUMN, kind="stable")
+
+
+def _require_permission(allow_test: bool) -> None:
+    if allow_test is not True:
+        raise HeldOutTestSetError(
+            "The test split is reserved for the final evaluation (Phase 4). "
+            "Pass allow_test=True only there."
+        )
+
+
+def load_test_with_duplicates(
+    *,
+    allow_test: bool = False,
+    path: Path = RAW_CSV,
+    expected_rows: int | None = EXPECTED_ROWS,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Return the held-out test split and the exact duplicates removed from its period.
+
+    The first frame is the test split of the deduplicated data (the primary evaluation
+    data). The second holds the dropped duplicate rows whose ``Time`` falls in the test
+    period; the two together are the test period "without deduplication". An exact
+    duplicate has the same ``Time`` as its original, so no duplicate of a training or
+    validation row can be among them. The file is read once.
+
+    Refuses to run unless ``allow_test=True`` is passed, like :func:`load_test`.
+    """
+    _require_permission(allow_test)
+    df = load_raw(path, expected_rows=expected_rows).sort_values(TIME_COLUMN, kind="stable")
+    duplicated = duplicate_mask(df)
+    test = time_based_split(df[~duplicated])["test"]
+    duplicates = df[duplicated]
+    return test, duplicates[duplicates[TIME_COLUMN] >= test[TIME_COLUMN].min()]
+
+
 def load_test(
     *,
     allow_test: bool = False,
@@ -201,12 +242,33 @@ def load_test(
     Refuses to run unless ``allow_test=True`` is passed, so the test set cannot be used by
     accident during model development.
     """
-    if allow_test is not True:
-        raise HeldOutTestSetError(
-            "The test split is reserved for the final evaluation (Phase 4). "
-            "Pass allow_test=True only there."
-        )
+    _require_permission(allow_test)
     return _load_splits(path, expected_rows, deduplicate)["test"]
+
+
+def stratified_random_split(
+    df: pd.DataFrame,
+    train_frac: float = TRAIN_FRAC,
+    val_frac: float = VAL_FRAC,
+    seed: int = RANDOM_SEED,
+    target_column: str = TARGET_COLUMN,
+) -> dict[str, pd.DataFrame]:
+    """Shuffled train / val / test split with the same fraud rate in every part.
+
+    Only for the secondary analysis of Phase 4. It ignores time: a model is tested on
+    transactions that are older than some it was trained on, so its results are not an
+    estimate of performance on future data. The primary split is :func:`time_based_split`.
+    """
+    train, rest = train_test_split(
+        df, train_size=train_frac, stratify=df[target_column], random_state=seed
+    )
+    val, test = train_test_split(
+        rest,
+        train_size=val_frac / (1 - train_frac),
+        stratify=rest[target_column],
+        random_state=seed,
+    )
+    return {"train": train, "val": val, "test": test}
 
 
 def split_xy(

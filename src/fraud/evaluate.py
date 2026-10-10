@@ -106,6 +106,28 @@ class WeightedAveragePrecision:
         return float(np.sum(np.diff(recall, prepend=0.0) * precision))
 
 
+class WeightedRocAuc:
+    """ROC-AUC of fixed scores under varying row weights (see WeightedAveragePrecision).
+
+    ROC-AUC is the probability that a random fraud row scores higher than a random
+    legitimate row, counting ties as one half.
+    """
+
+    def __init__(self, y_true: np.ndarray, y_score: np.ndarray) -> None:
+        self._order = np.argsort(-y_score, kind="stable")
+        sorted_scores = y_score[self._order]
+        self._positive = (y_true[self._order] == 1).astype(float)
+        self._group_end = np.r_[np.flatnonzero(np.diff(sorted_scores)), len(sorted_scores) - 1]
+
+    def __call__(self, counts: np.ndarray) -> float:
+        weights = counts[self._order].astype(float)
+        positives = np.diff(np.cumsum(weights * self._positive)[self._group_end], prepend=0.0)
+        negatives = np.diff(np.cumsum(weights * (1 - self._positive))[self._group_end], prepend=0.0)
+        negatives_below = negatives.sum() - np.cumsum(negatives)
+        wins = positives @ (negatives_below + 0.5 * negatives)
+        return float(wins / (positives.sum() * negatives.sum()))
+
+
 def bootstrap_cis(
     y_true: ArrayLike,
     y_score: ArrayLike,

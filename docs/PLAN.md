@@ -277,3 +277,43 @@ with its best strategy, and tries a fixed set of settings (5 to 12 per classifie
 **Final model.** The configuration that wins under the same rule over all rows, fitted on
 the training split. No decision threshold is chosen in Phase 3 and the test split is not
 used.
+
+## 15. Final evaluation protocol (Phase 4)
+
+Written before the test split was loaded. The validation results of this section's analyses
+had been seen at that point (a dry run that uses validation rows in place of the test split).
+
+1. **Model.** The pipeline saved by Phase 3 (XGBoost, Safe-Level-SMOTE 0.5, tuned), fitted
+   on the training split only. It is not refitted on train + validation: the threshold is
+   chosen on validation scores of exactly this model, and a refitted model would have a
+   different score distribution with no data left to choose a threshold on.
+2. **Threshold.** A transaction is flagged when `score >= threshold`. The threshold is the
+   one with the lowest total cost on validation (section 8): the sum of the amounts of
+   missed fraud plus the review cost for every flagged transaction. Candidate thresholds
+   are the midpoints between neighbouring distinct validation scores, plus "flag nothing"
+   and "flag everything". A cost tie goes to the threshold that flags fewer transactions.
+   The F1-maximising threshold is reported for comparison only.
+3. **Thesis hypothesis** ("oversampling mainly shifts the decision boundary"), on
+   validation: the selected model against XGBoost with class weights, XGBoost without
+   resampling and the MLP without resampling (the stage 1 configurations, default
+   parameters). Compared: PR-AUC, cost with every model at threshold 0.5, and cost with
+   every model at its own cost-optimal threshold, as paired bootstrap differences. For the
+   last one the threshold is chosen again inside every resample. Support for the
+   hypothesis: the cost gap at 0.5 shrinks or disappears at the optimal thresholds.
+4. **Test, once.** `python -m fraud.final_eval` loads the test split in one place and
+   appends every load to `reports/test_set_access.log`. Reported: the selected model at its
+   validation threshold, and the three reference models at their own validation
+   thresholds (after selection, not used for it). Intervals are 95 % stratified bootstrap.
+5. **With and without deduplication.** Primary: the test split of the deduplicated data.
+   "Without deduplication": the same model and threshold on those rows plus the exact
+   duplicates that were removed from the test period. Nothing is refitted.
+6. **Secondary random split.** The selected configuration refitted on a stratified random
+   70/15/15 split of the deduplicated data (seed 42), threshold from its validation part,
+   evaluated on its test part. Labelled as secondary; it does not estimate performance on
+   future data.
+7. **Score, not probability.** The model is trained on oversampled data, so its output is
+   reported as a fraud score unless the reliability curve on validation shows it is
+   calibrated.
+8. **SHAP.** TreeExplainer on the XGBoost step. Local examples are picked by rule: the
+   caught and the missed fraud with the largest amount, and the false alarm with the
+   highest score.
