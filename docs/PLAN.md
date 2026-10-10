@@ -20,7 +20,7 @@ The project is a portfolio piece for a data role and builds on the author's MSc 
 Kaggle **Credit Card Fraud Detection** (`mlg-ulb/creditcardfraud`):
 - ~285,000 transactions over two days, ~0.17 % fraud (492 cases)
 - Features: `Time` (seconds since first transaction), `V1`–`V28` (PCA components, anonymised), `Amount`, target `Class` (1 = fraud)
-- Licence: ODbL. The raw CSV is **not committed** to the repo; a script downloads it via the Kaggle API (`~/.kaggle/kaggle.json` required).
+- Licence: ODbL. The raw CSV is **not committed** to the repo; a script downloads it via the Kaggle API (`make data`). This needs a Kaggle API token, either saved in `~/.kaggle/access_token` or set in the `KAGGLE_API_TOKEN` environment variable.
 
 ## 3. Tech stack
 

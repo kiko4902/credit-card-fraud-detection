@@ -20,7 +20,7 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 ```
 docs/PLAN.md          project plan            docs/images/     README images
 data/raw|processed/   gitignored              notebooks/       01_eda.ipynb (Phase 1)
-src/fraud/            package: config.py, data.py (+ features, models, evaluate, train, explain)
+src/fraud/            config, data, features, plotting (+ models, evaluate, train, explain later)
 models/               final model artifact    reports/         results.csv, figures/
 app/                  api.py, streamlit_app.py
 tests/                pytest, synthetic fixtures in conftest.py
@@ -64,13 +64,13 @@ importing it triggers authentication.
 | `make data` | download the dataset into `data/raw/` (skipped if present) and validate it |
 | `make lint` / `make format` | ruff check + format check / autofix |
 | `make test` | pytest |
-| `make notebook` | execute notebooks top to bottom (Phase 1) |
+| `make notebook` | execute notebooks in place, outputs kept (needs data; never run in CI) |
 | `make train-baseline`, `experiments`, `api`, `app` | not implemented yet |
 
 ## Current status
 
-- [ ] Phase 0 – Setup (in progress)
-- [ ] Phase 1 – EDA
+- [x] Phase 0 – Setup
+- [ ] Phase 1 – EDA (in progress)
 - [ ] Phase 2 – Training and evaluation pipeline
 - [ ] Phase 3 – Experiments
 - [ ] Phase 4 – Threshold and explainability

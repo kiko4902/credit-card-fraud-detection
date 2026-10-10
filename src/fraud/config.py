@@ -35,3 +35,8 @@ EXPECTED_ROWS: int = 284_807
 # A correctly passed legitimate transaction (TN) costs nothing.
 REVIEW_COST_EUR: float = 5.0
 FN_COST_IS_AMOUNT: bool = True
+
+# --- Time-based split (PLAN.md section 5) -------------------------------------
+# Earliest 70 % of transactions for training, next 15 % validation, last 15 % test.
+TRAIN_FRAC: float = 0.70
+VAL_FRAC: float = 0.15

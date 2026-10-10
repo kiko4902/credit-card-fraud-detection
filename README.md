@@ -33,6 +33,7 @@ Requirements: [uv](https://docs.astral.sh/uv/), GNU make, and a Kaggle API token
 ```bash
 make install   # install dependencies from uv.lock
 make data      # download the dataset into data/raw/ (not committed)
+make notebook  # re-run the EDA notebook (notebooks/01_eda.ipynb)
 make lint
 make test
 ```
