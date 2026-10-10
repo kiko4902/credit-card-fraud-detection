@@ -1,0 +1,53 @@
+[project]
+name = "fraud"
+version = "0.1.0"
+description = "Credit card fraud detection on imbalanced data: leakage-free validation, resampling comparison, cost-based threshold."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.143.0",
+    "imbalanced-learn>=0.14.2",
+    "kaggle>=2.2.4",
+    "lightgbm>=4.7.0",
+    "matplotlib>=3.11.2",
+    "numpy>=2.5.3",
+    "pandas>=3.0.6",
+    "scikit-learn>=1.9.1",
+    "seaborn>=0.13.2",
+    "shap>=0.53.0",
+    "streamlit>=1.65.0",
+    "uvicorn>=0.54.0",
+]
+
+[project.optional-dependencies]
+extras = [
+    "mlflow>=3.17.0",
+    "xgboost>=3.4.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraud"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "jupyter>=1.1.1",
+    "nbconvert>=7.17.1",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]

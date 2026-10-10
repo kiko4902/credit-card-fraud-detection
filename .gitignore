@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Data: never committed, downloaded with `make data`
+data/raw/*
+data/processed/*
+!data/**/.gitkeep
+
+# Experiment tracking and large generated artifacts
+mlruns/
+mlartifacts/
+models/*
+!models/.gitkeep
+*.zip
+
+# Secrets
+.env
+kaggle.json
+access_token*
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

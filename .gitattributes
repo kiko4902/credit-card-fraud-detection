@@ -1,0 +1,8 @@
+# Enforce LF line endings everywhere (Windows dev machine, Linux CI).
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.joblib binary
+*.pkl binary
+*.zip binary
