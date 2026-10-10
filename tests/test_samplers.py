@@ -6,7 +6,12 @@ from sklearn.base import clone
 
 from fraud.data import split_xy, time_based_split
 from fraud.models import STRATEGIES, build_pipeline
-from fraud.samplers import PolynomFitSMOTE, SafeLevelSMOTE
+from fraud.samplers import (
+    PolynomFitSMOTE,
+    SafeLevelSMOTE,
+    neighbours_without_self,
+    safe_level_gap_bounds,
+)
 
 NEW_SAMPLERS = [SafeLevelSMOTE, PolynomFitSMOTE]
 RATIOS = [0.1, 0.5, 1.0]
@@ -92,16 +97,100 @@ def test_polynom_fit_stays_inside_the_minority_class(
     assert (synthetic.max() <= minority.max() + 1e-9).all()
 
 
-def test_safe_level_smote_can_interpolate_towards_majority_rows(
+def test_safe_level_smote_stays_inside_the_minority_class(
     scaled: tuple[pd.DataFrame, pd.Series],
 ) -> None:
-    # Documents a property of the smote-variants implementation (see the class docstring):
-    # neighbours are searched in the whole data, so synthetic rows can leave the minority range.
+    # The neighbour n is always a minority row, so no synthetic row leaves the minority range.
     X, y = scaled
     X_out, _ = SafeLevelSMOTE(sampling_ratio=0.5).fit_resample(X, y)
     minority, synthetic = X[y == 1], X_out.iloc[len(X) :]
-    outside = (synthetic < minority.min() - 1e-9) | (synthetic > minority.max() + 1e-9)
-    assert outside.any().any()
+    assert (synthetic.min() >= minority.min() - 1e-9).all()
+    assert (synthetic.max() <= minority.max() + 1e-9).all()
+
+
+def test_safe_level_gap_bounds_follow_the_five_cases_of_the_paper() -> None:
+    sl_p = np.array([0, 3, 2, 4, 1, 0])
+    sl_n = np.array([0, 0, 2, 1, 4, 3])
+    low, high = safe_level_gap_bounds(sl_p, sl_n)
+    assert np.isnan(low[0]) and np.isnan(high[0])  # 1: both noise, nothing generated
+    assert (low[1], high[1]) == (0.0, 0.0)  # 2: n is noise, p is duplicated
+    assert (low[2], high[2]) == (0.0, 1.0)  # 3: equal safe levels, plain SMOTE
+    assert (low[3], high[3]) == (0.0, 0.25)  # 4: p safer, gap in [0, sl_n / sl_p]
+    assert (low[4], high[4]) == (0.75, 1.0)  # 5: n safer, gap in [1 - sl_p / sl_n, 1]
+    assert (low[5], high[5]) == (1.0, 1.0)  # 5 with sl_p = 0: n is duplicated
+
+
+def test_neighbours_never_include_the_row_itself_even_with_exact_copies() -> None:
+    points = np.array([[0.0], [0.0], [0.0], [1.0], [5.0]])
+    neighbours = neighbours_without_self(points, np.arange(5), k=2)
+    assert all(row not in found for row, found in enumerate(neighbours))
+    assert set(neighbours[0]) == {1, 2}
+    assert set(neighbours[4]) <= {0, 1, 2, 3} and 3 in neighbours[4]
+
+
+def noisy_minority_data() -> tuple[pd.DataFrame, pd.Series]:
+    """A tight minority cluster, plus two minority rows deep inside the majority class."""
+    rng = np.random.default_rng(0)
+    cluster = rng.normal(0.0, 0.1, size=(12, 2))
+    noise = np.array([[10.0, 10.0], [-10.0, 10.0]])
+    majority = np.vstack(
+        [rng.normal(centre, 0.3, size=(60, 2)) for centre in ([10, 10], [-10, 10], [0, 6])]
+    )
+    X = pd.DataFrame(np.vstack([majority, cluster, noise]), columns=["a", "b"])
+    y = pd.Series([0] * len(majority) + [1] * 14, name="Class")
+    return X, y
+
+
+def test_safe_level_smote_generates_nothing_around_noise_rows() -> None:
+    # The two noise rows have safe level 0 and every minority neighbour of theirs is in the
+    # cluster, so a synthetic row started from them is a copy of a cluster row (case 5 with
+    # sl_p = 0). Plain SMOTE would place rows on the segments towards the noise rows.
+    X, y = noisy_minority_data()
+    X_out, _ = SafeLevelSMOTE(sampling_ratio=0.5).fit_resample(X, y)
+    cluster, synthetic = X.iloc[180:192], X_out.iloc[len(X) :]
+    assert len(synthetic) == 90 - 14
+    assert (synthetic.min() >= cluster.min() - 1e-12).all()
+    assert (synthetic.max() <= cluster.max() + 1e-12).all()
+
+
+def test_safe_level_smote_fails_clearly_when_every_minority_row_is_noise() -> None:
+    rng = np.random.default_rng(0)
+    majority = rng.normal(0.0, 0.1, size=(200, 2)) + np.repeat([[0, 0], [50, 50]], 100, axis=0)
+    X = pd.DataFrame(np.vstack([majority, [[0.0, 0.0], [50.0, 50.0]]]), columns=["a", "b"])
+    y = pd.Series([0] * 200 + [1] * 2, name="Class")
+    with pytest.raises(ValueError, match="safe level 0"):
+        SafeLevelSMOTE(sampling_ratio=0.5).fit_resample(X, y)
+
+
+def test_polynom_fit_places_evenly_spaced_rows_on_the_segments_to_the_mean() -> None:
+    minority = np.array([[0.0, 0.0], [4.0, 0.0], [2.0, 6.0]])  # mean (2, 2)
+    majority = np.arange(40, dtype=float).reshape(20, 2) + 100
+    X = pd.DataFrame(np.vstack([majority, minority]), columns=["a", "b"])
+    y = pd.Series([0] * 20 + [1] * 3, name="Class")
+    # 9 minority rows asked for: 6 new, 2 per minority row at 1/3 and 2/3 of the segment.
+    X_out, _ = PolynomFitSMOTE(sampling_ratio=0.45).fit_resample(X, y)
+    expected = np.array([[2, 2], [4, 4], [10, 2], [8, 4], [6, 14], [6, 10]]) / 3
+    np.testing.assert_allclose(X_out.iloc[len(X) :].to_numpy(), expected)
+
+
+def test_polynom_fit_spreads_the_remainder_over_different_minority_rows(
+    scaled: tuple[pd.DataFrame, pd.Series],
+) -> None:
+    X, y = scaled
+    minority = X[y == 1].to_numpy()
+    X_out, _ = PolynomFitSMOTE(sampling_ratio=0.5).fit_resample(X, y)
+    synthetic = X_out.iloc[len(X) :].to_numpy()
+    centre = minority.mean(axis=0)
+    # Each synthetic row is x + t * (mean - x) for one minority row x and one t in (0, 1).
+    counts = np.zeros(len(minority), dtype=int)
+    direction = centre - minority
+    for row in synthetic:
+        fraction = ((row - minority) * direction).sum(axis=1) / (direction**2).sum(axis=1)
+        residual = np.abs(minority + fraction[:, None] * direction - row).max(axis=1)
+        origin = int(residual.argmin())
+        assert residual[origin] < 1e-9 and 0 < fraction[origin] < 1
+        counts[origin] += 1
+    assert counts.max() - counts.min() <= 1
 
 
 @pytest.mark.parametrize("sampler_class", NEW_SAMPLERS)

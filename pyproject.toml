@@ -55,5 +55,4 @@ dev = [
     "nbconvert>=7.17.1",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
-    "smote-variants>=1.0.1",
 ]

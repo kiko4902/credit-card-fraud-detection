@@ -132,8 +132,19 @@ with its best strategy, scored with the same CV. Every tried setting is recorded
   k in {3, 5, 7}; here k is fixed, so the SMOTE-family results are not tuned over k.
   The cleaning step of SMOTE-ENN uses the standard 3-nearest-neighbour editing rule.
 - SMOTE, SMOTE-Tomek and SMOTE-ENN come from imbalanced-learn. Safe-Level-SMOTE and
-  Polynom-Fit SMOTE (star topology) come from the `smote-variants` package, wrapped so that
-  they take the same minority:majority ratio and produce exactly that many minority rows.
+  Polynom-Fit SMOTE are implemented in `fraud.samplers` from the original papers (the thesis
+  code is not available, so they are not guaranteed to match the thesis implementation
+  detail for detail). They take the same minority:majority ratio as the other samplers and
+  produce exactly that many minority rows.
+  - Safe-Level-SMOTE (Bunkhumpornpat et al., 2009): the safe level of a row is the number
+    of minority rows among its k nearest neighbours in the whole training data; the partner
+    of a minority row is one of its k nearest *minority* rows; the gap follows the five
+    cases of the paper and is drawn per attribute. The paper's single pass is repeated
+    until the ratio is reached.
+  - Polynom-Fit SMOTE (Gazzah & Amara, 2008): star topology only, i.e. evenly spaced points
+    on the segments from each minority row to the minority mean. The bus, mesh and
+    polynomial-curve topologies are not implemented. For a whole number of points per
+    minority row the output is identical to the `smote-variants` package (checked once).
 - Features are standardised before every sampler (fitted on the training part only), for
   every classifier, so all classifiers see the same resampled data.
 - Resampled training sets are cached per training part, sampler, ratio and seed and reused

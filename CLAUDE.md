@@ -13,8 +13,8 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 - Python 3.12, dependencies managed with uv (`pyproject.toml` + `uv.lock`)
 - pandas, numpy, scikit-learn, imbalanced-learn, lightgbm, xgboost, shap, matplotlib, seaborn
 - FastAPI + uvicorn (API), Streamlit (UI), Docker, GitHub Actions
-- pytest, ruff; dev-only `smote-variants` (Safe-Level / Polynom-Fit SMOTE; pulls TensorFlow,
-  imported lazily in `fraud.samplers`); optional extra `extras` = mlflow
+- pytest, ruff; optional extra `extras` = mlflow. Safe-Level / Polynom-Fit SMOTE are our own
+  implementations in `fraud.samplers` (no `smote-variants`).
 
 ## Repository structure
 
@@ -47,16 +47,14 @@ tests/                pytest, synthetic fixtures in conftest.py
   the Linux CI runner: no PowerShell/cmd syntax, no OS-specific paths.
 - Never run destructive commands (`rm -rf` on data, git history rewrites, deleting files
   outside the project) without asking first.
-- Kaggle token lives in `~/.kaggle/` (or `KAGGLE_API_TOKEN`). Never print it, copy it into
-  the project, or commit it.
+- Kaggle token lives in `~/.kaggle/` (or `KAGGLE_API_TOKEN`). Never print, copy or commit it.
 - The machine's C: drive is nearly full; everything (caches, venv, data) stays on F:.
 
 ## Testing and CI
 
 CI has no Kaggle access, so **tests must never need the real dataset**. Use the synthetic
-`transactions` fixture / `make_synthetic_transactions()` in `tests/conftest.py` (same
-columns as `creditcard.csv`, fixed seed). Import `kaggle` only lazily inside functions:
-importing it triggers authentication.
+`transactions` fixture in `tests/conftest.py` (same columns as `creditcard.csv`, fixed
+seed). Import `kaggle` only lazily inside functions: importing it triggers authentication.
 
 ## Makefile commands
 

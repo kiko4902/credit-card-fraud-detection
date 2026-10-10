@@ -21,6 +21,10 @@ import pandas as pd
 from sklearn.base import BaseEstimator, clone
 
 Steps = list[tuple[str, BaseEstimator]]
+# Part of every cache key. Increase it when the implementation of a sampler changes without
+# its parameters changing, so that results of the old implementation are never reused.
+# 2: Safe-Level-SMOTE and Polynom-Fit SMOTE implemented in fraud.samplers.
+CACHE_VERSION: int = 2
 
 
 @dataclass(frozen=True)
@@ -67,7 +71,7 @@ class ResampleCache:
             for name, step in steps
         ]
         data = [list(X.columns), X.to_numpy(), X.index.to_numpy(), y.to_numpy()]
-        return joblib.hash([description, data])
+        return joblib.hash([CACHE_VERSION, description, data])
 
     def _path(self, key: str) -> Path:
         return self.directory / f"{key}.joblib"
