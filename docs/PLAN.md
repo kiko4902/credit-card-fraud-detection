@@ -185,3 +185,43 @@ where they differ.
    shuffled k-fold, and every validation fold must contain a minimum number of fraud cases.
 5. **The test split is loaded only through `fraud.data.load_test(allow_test=True)`** and only
    in Phase 4.
+6. **Scaling is applied before distance-based samplers** (SMOTE family) even for tree models;
+   LightGBM uses `class_weight="balanced"`; cross-validation uses 3 time-ordered folds with at
+   least 30 fraud cases in each validation fold.
+
+## 14. Experiment grid and selection rule (Phase 3)
+
+Written down before any Phase 3 result was looked at.
+
+**Grid.** 3 models (logistic regression, random forest, LightGBM) x 11 strategies = 33
+configurations: none; class weights; random undersampling, SMOTE, Borderline-SMOTE, ADASYN
+and SMOTE-Tomek, each at minority:majority ratios 0.1 and 0.5. Model hyperparameters are the
+fixed defaults from `fraud.models` during the strategy comparison.
+
+**Selection rule.**
+
+1. *Primary:* the mean PR-AUC over the 3 time-ordered CV folds of the training split (218
+   fraud cases across the validation folds, against 55 in the validation split).
+2. *Tie-break:* configurations within 0.005 of the best mean CV PR-AUC count as tied. Among
+   them the simplest wins: no resampling, then class weights, then resampling; after that the
+   higher CV mean.
+3. *Confirmation:* validation PR-AUC with its stratified bootstrap 95 % CI is reported for
+   every configuration. It confirms or questions the CV ranking but does not replace it. If
+   the CV winner is clearly worse on validation than the configuration that is best on
+   validation (paired bootstrap CI of the difference excludes zero), this is flagged in the
+   summary and the choice is made by the author, not automatically.
+4. *Paired comparisons:* for the top 3 grid configurations by the rule above, a paired
+   stratified bootstrap on the validation split against (a) the same model with no resampling
+   and (b) the overall baseline (logistic regression, no resampling), reporting the
+   difference in PR-AUC with its 95 % CI.
+
+**Tuning.** Only after the strategy comparison, and only for the two model families with the
+best CV result, each with its best strategy from the grid. Fixed, small search spaces
+(logistic regression: 5 values of `C`; LightGBM: 12 seeded random draws over `num_leaves`,
+`learning_rate`, `n_estimators`, `min_child_samples`; random forest: 8 seeded random draws
+over `max_depth`, `min_samples_leaf`, `max_features`), scored with the same CV. Every tried
+setting is recorded in `reports/results.csv` with `stage = tuning`.
+
+**Final model.** The configuration that wins under the same rule over all rows (grid and
+tuning), fitted on the training split. No decision threshold is chosen in Phase 3 and the
+test split is not used.
