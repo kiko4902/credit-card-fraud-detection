@@ -125,7 +125,12 @@ def _ratio(row: pd.Series) -> float | None:
 def changed_params(row: pd.Series, reference: pd.Series) -> str:
     """Model parameters of ``row`` that differ from ``reference``, as ``name=value`` pairs."""
     params, base = json.loads(row["params"]), json.loads(reference["params"])
-    changed = {name: value for name, value in params.items() if base.get(name) != value}
+    # NaN (XGBoost's ``missing``) never equals itself, so compare the JSON text.
+    changed = {
+        name: value
+        for name, value in params.items()
+        if json.dumps(base.get(name)) != json.dumps(value)
+    }
     return ", ".join(f"{name}={value}" for name, value in sorted(changed.items())) or "defaults"
 
 
@@ -346,7 +351,8 @@ def paired_comparisons(
             rows.append(
                 {
                     "config_id": config["config_id"],
-                    "config": config_label(config),
+                    "config": config_label(config)
+                    + (" (tuned)" if config["stage"] == "stage3" else ""),
                     "versus": name,
                     **result,
                 }
