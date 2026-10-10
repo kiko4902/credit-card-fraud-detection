@@ -29,7 +29,42 @@
 - **LightGBM is unstable on this data.** Three LightGBM runs collapse on validation while
   looking normal in CV or in neighbouring settings: no resampling (0.062), Safe-Level-SMOTE
   0.5 (CV 0.727, validation 0.396) and one tuning setting (0.359). This is a reason not to
-  pick a LightGBM configuration from a single number.
+  pick a LightGBM configuration from a single number. The cause is diagnosed below.
+- **Decision (approved after review):** the selection stays with the pre-registered rule.
+  The top configurations are statistically tied and the rule decided between them; the
+  model is not switched to the MLP on the basis of its validation score.
+
+### Why three LightGBM runs collapse
+
+It is a numerical divergence of the boosting, not a bug in the pipeline and not a property
+of one fold or one sampler. Scoring the fitted models after a growing number of trees
+(full training split, validation PR-AUC) shows:
+
+| Run | After 20 to 50 trees | At the end | Largest raw score at the end |
+|---|---|---|---|
+| No resampling, defaults | 0.57 (20 trees), already unstable | 0.062 | about 265,000 |
+| Safe-Level-SMOTE 0.5, defaults | 0.819 (50 trees) | 0.396 | about 720 |
+| Polynom-Fit 0.1, 15 leaves, min_child_samples 10 | 0.822 (20 trees) | 0.359 | about 3,700 |
+| Class weights, defaults (healthy, for reference) | 0.832 (50 trees) | 0.831 | about 37 |
+
+- The raw scores (log-odds) explode to hundreds or thousands, where a healthy run stays
+  below about 40. In the no-resampling run the loss on the training data itself goes up
+  from 0.014 to 0.17 while trees are added.
+- Mechanism: a leaf value is the sum of gradients divided by the sum of hessians. For rows
+  the model is already sure about, the hessian p(1 - p) is almost zero. LightGBM's defaults
+  allow leaves with a hessian sum of only 0.001 and use no L2 penalty, so a leaf holding a
+  few confident rows and one misclassified row gets an enormous value. XGBoost's defaults
+  (minimum hessian sum 1, L2 penalty 1) prevent this, which is why XGBoost without
+  resampling is merely weak (0.670) and not broken.
+- Each of the following alone removes the collapse: a lower learning rate (no resampling
+  with 0.01: 0.808; Safe-Level 0.5 with 0.02: 0.789), `min_child_samples` 100 (no
+  resampling 0.760; Safe-Level 0.5: 0.854) and, for the tuning setting, 20 instead of 10
+  (0.831).
+- It is chaotic: Safe-Level-SMOTE 0.5 with resampling seed 1 instead of 42 does not
+  collapse (0.819). Whether a given LightGBM configuration is hit is close to chance, so
+  the CV means of the other LightGBM runs should be read with that in mind.
+- Not fixed, because LightGBM is not selected. A fix would be to add `min_child_samples`,
+  `min_child_weight` or `reg_lambda` to its defaults and rerun its configurations.
 - **Runtime.** Every stage ran well inside the budget: stage 2 took about 25 minutes for 60
   configurations and stage 3 about 5 minutes. SMOTE-Tomek and SMOTE-ENN cost 45 to 80 s of
   resampling on the full training split, the other samplers about a second.
