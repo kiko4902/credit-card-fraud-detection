@@ -177,8 +177,8 @@ Choose the threshold that minimises total cost on the validation set; report cos
 
 ## 10. Serving and deployment
 
-- **FastAPI** `POST /predict`: input transaction features → fraud probability, decision at chosen threshold, top contributing features. `GET /health`.
-- **Streamlit app**: pick a transaction from the test set (or enter values), show probability, decision, SHAP explanation; a second page with the experiment results table and PR curves.
+- **FastAPI** `POST /predict`: input transaction features → fraud score (not a probability, see section 15), decision at chosen threshold, top contributing features. Also `POST /predict/batch`, `GET /health`, `GET /model-info`.
+- **Streamlit app**: pick a transaction from the test set (or enter values), show fraud score, decision, SHAP explanation; a second page with the experiment results table and PR curves.
 - **Docker** image for the API.
 - Deploy the Streamlit app to Streamlit Community Cloud or Hugging Face Spaces (free). The app must load a saved model and a small sample of test data, not the full dataset.
 

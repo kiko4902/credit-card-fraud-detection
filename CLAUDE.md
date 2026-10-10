@@ -10,11 +10,10 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 
 ## Tech stack
 
-- Python 3.12, dependencies managed with uv (`pyproject.toml` + `uv.lock`)
-- pandas, numpy, scikit-learn, imbalanced-learn, lightgbm, xgboost, shap, matplotlib, seaborn
-- FastAPI + uvicorn (API), Streamlit (UI), Docker, GitHub Actions
-- pytest, ruff; optional extra `extras` = mlflow. Safe-Level / Polynom-Fit SMOTE are our own
-  implementations in `fraud.samplers` (no `smote-variants`).
+- Python 3.12, uv (`pyproject.toml` + `uv.lock`). Project dependencies are runtime only
+  (pandas, scikit-learn, imbalanced-learn, xgboost); groups `train`, `api`, `app`, `dev` are
+  all installed by default. Docker images install runtime + one group.
+- Safe-Level / Polynom-Fit SMOTE are our own implementations in `fraud.samplers`.
 
 ## Repository structure
 
@@ -22,11 +21,11 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 docs/PLAN.md          project plan            docs/images/     README images
 data/raw|processed/   gitignored              notebooks/       01_eda.ipynb (Phase 1)
 src/fraud/            config, data, features, samplers, models, cache, evaluate, train,
-                      selection, experiments, report, threshold, explain, final_eval, plotting
+                      selection, experiments, report, threshold, explain, final_eval, plotting,
+                      serving (runtime only: no shap/matplotlib imports), app_data
 models/               final model artifact    reports/         results.csv, figures/
-app/                  api.py, streamlit_app.py
-tests/                pytest, synthetic fixtures in conftest.py
-.github/workflows/    ci.yml (lint + tests)
+app/                  api.py, streamlit_app.py, data/ (committed sample + validation scores)
+tests/                pytest, synthetic fixtures     .github/workflows/ci.yml  lint + tests
 ```
 
 ## Conventions
@@ -67,7 +66,8 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 | `make train-baseline` | logistic regression, no resampling; upserts its row in `reports/results.csv` |
 | `make experiments` | stages 1-3 + report, resumable (design: PLAN.md §6, rule: §14) |
 | `make evaluate` | Phase 4: threshold, the one test-set evaluation (logged), SHAP, report |
-| `make api`, `app` | not implemented yet |
+| `make api` / `app` | FastAPI on :8000 / Streamlit on :8501; both use `fraud.serving` |
+| `make docker-build` / `docker-run` | API image (`compose.yaml` adds the app); `make app-data` re-exports app data |
 
 ## Current status
 
@@ -76,5 +76,5 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 - [x] Phase 2 – Training and evaluation pipeline
 - [x] Phase 3 – Experiments
 - [x] Phase 4 – Threshold and explainability
-- [ ] Phase 5 – API, app, Docker
+- [ ] Phase 5 – API, app, Docker (done, awaiting approval)
 - [ ] Phase 6 – CI, deployment, documentation

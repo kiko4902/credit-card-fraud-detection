@@ -5,13 +5,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 
-from fraud.config import FIGURES_DIR
+from fraud.config import FIGURES_DIR, FRAUD_COLOR, LEGIT_COLOR, NEUTRAL_COLOR
 
-# Blue / orange stay distinguishable under the common colour-vision deficiencies.
-# Legitimate is always blue and fraud always orange, in every figure.
-LEGIT_COLOR: str = "#2a78d6"
-FRAUD_COLOR: str = "#eb6834"
-NEUTRAL_COLOR: str = "#52514e"
 CLASS_COLORS: dict[int, str] = {0: LEGIT_COLOR, 1: FRAUD_COLOR}
 CLASS_LABELS: dict[int, str] = {0: "Legitimate", 1: "Fraud"}
 # Experiment figures use colours distinct from the two class colours.

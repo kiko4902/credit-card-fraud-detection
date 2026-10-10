@@ -1,10 +1,15 @@
 """Project-wide configuration: paths, random seed, dataset facts and cost assumptions."""
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
 # --- Paths -------------------------------------------------------------------
-PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
+# The repository root. When the package is installed as a wheel (Docker images) the root
+# cannot be derived from this file, so FRAUD_PROJECT_ROOT names it.
+PROJECT_ROOT: Path = Path(
+    os.environ.get("FRAUD_PROJECT_ROOT") or Path(__file__).resolve().parents[2]
+)
 
 DATA_DIR: Path = PROJECT_ROOT / "data"
 RAW_DIR: Path = DATA_DIR / "raw"
@@ -29,6 +34,19 @@ FINAL_METRICS_JSON: Path = REPORTS_DIR / "final_metrics.json"
 TEST_ACCESS_LOG: Path = REPORTS_DIR / "test_set_access.log"
 # Small sample of explained test transactions for the Streamlit app.
 APP_SAMPLE_CSV: Path = PROJECT_ROOT / "app" / "data" / "explained_sample.csv"
+# Validation scores (score, label, amount) for the threshold page of the app.
+APP_VALIDATION_SCORES: Path = PROJECT_ROOT / "app" / "data" / "validation_scores.csv.gz"
+
+# --- Serving (PLAN.md section 10) ---------------------------------------------
+# Largest number of transactions accepted by one POST /predict/batch request.
+MAX_BATCH_SIZE: int = 1000
+
+# --- Colours (figures and the app) -------------------------------------------
+# Blue / orange stay distinguishable under the common colour-vision deficiencies.
+# Legitimate is always blue and fraud always orange, in every figure and in the app.
+LEGIT_COLOR: str = "#2a78d6"
+FRAUD_COLOR: str = "#eb6834"
+NEUTRAL_COLOR: str = "#52514e"
 
 # --- Reproducibility ---------------------------------------------------------
 RANDOM_SEED: int = 42

@@ -20,30 +20,16 @@ from imblearn.pipeline import Pipeline
 
 from fraud.config import AMOUNT_COLUMN, PCA_COLUMNS, RANDOM_SEED, TARGET_COLUMN, TIME_COLUMN
 from fraud.evaluate import predict_at_threshold
-from fraud.features import HOUR_COS, HOUR_SIN, LOG_AMOUNT, MODEL_FEATURES, SECONDS_PER_DAY
+from fraud.features import FEATURE_LABELS, MODEL_FEATURES, SECONDS_PER_DAY
 from fraud.plotting import SAVE_DPI
+from fraud.serving import model_inputs
 
-FEATURE_LABELS: dict[str, str] = {
-    **{column: column for column in PCA_COLUMNS},
-    LOG_AMOUNT: "Amount (log)",
-    HOUR_SIN: "Time of day (sine)",
-    HOUR_COS: "Time of day (cosine)",
-}
 CASE_LABELS: dict[str, str] = {
     "caught_fraud": "Caught fraud",
     "missed_fraud": "Missed fraud",
     "false_alarm": "False alarm",
 }
 SHAP_PREFIX: str = "shap_"
-
-
-def model_inputs(pipeline: Pipeline, features: pd.DataFrame) -> pd.DataFrame:
-    """The rows as the classifier sees them: every transformer applied, samplers skipped."""
-    for _, step in pipeline.steps[:-1]:
-        if hasattr(step, "fit_resample"):
-            continue
-        features = step.transform(features)
-    return features
 
 
 def readable_features(pipeline: Pipeline, features: pd.DataFrame) -> pd.DataFrame:

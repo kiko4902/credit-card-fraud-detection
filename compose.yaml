@@ -1,0 +1,21 @@
+# API and Streamlit app together. The app loads the model itself and does not call the API.
+#   docker compose up --build
+#   API:  http://localhost:8000/docs      App: http://localhost:8501
+services:
+  api:
+    build:
+      context: .
+      target: api
+    image: fraud-api
+    ports:
+      - "8000:8000"
+
+  app:
+    build:
+      context: .
+      target: streamlit
+      args:
+        GROUP: app
+    image: fraud-app
+    ports:
+      - "8501:8501"

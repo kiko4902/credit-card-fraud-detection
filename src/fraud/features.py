@@ -22,6 +22,13 @@ HOUR_SIN: str = "hour_sin"
 HOUR_COS: str = "hour_cos"
 RAW_FEATURES: list[str] = [TIME_COLUMN, *PCA_COLUMNS, AMOUNT_COLUMN]
 MODEL_FEATURES: list[str] = [*PCA_COLUMNS, LOG_AMOUNT, HOUR_SIN, HOUR_COS]
+# Names shown to people (plots, API responses, the app).
+FEATURE_LABELS: dict[str, str] = {
+    **{column: column for column in PCA_COLUMNS},
+    LOG_AMOUNT: "Amount (log)",
+    HOUR_SIN: "Time of day (sine)",
+    HOUR_COS: "Time of day (cosine)",
+}
 
 
 def elapsed_hour(time_seconds: pd.Series) -> pd.Series:

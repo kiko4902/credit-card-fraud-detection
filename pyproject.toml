@@ -4,21 +4,18 @@ version = "0.1.0"
 description = "Credit card fraud detection on imbalanced data: leakage-free validation, resampling comparison, cost-based threshold."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
+# Runtime dependencies only: what is needed to load the saved pipeline and score with it.
+# Everything else is in dependency groups, all installed by default (see [tool.uv]), so
+# the API image can install just these plus the "api" group.
 dependencies = [
-    "fastapi>=0.143.0",
     "imbalanced-learn>=0.14.2",
     "joblib>=1.6.0",
-    "kaggle>=2.2.4",
-    "lightgbm>=4.7.0",
-    "matplotlib>=3.11.2",
     "numpy>=2.5.3",
     "pandas>=3.0.6",
     "scikit-learn>=1.9.1",
-    "seaborn>=0.13.2",
-    "shap>=0.53.0",
-    "streamlit>=1.65.0",
-    "uvicorn>=0.54.0",
-    "xgboost>=3.4.1",
+    # Same library and version; the CPU-only wheel avoids the CUDA libraries on Linux.
+    "xgboost>=3.4.1; sys_platform != 'linux'",
+    "xgboost-cpu>=3.4.1; sys_platform == 'linux'",
 ]
 
 [project.optional-dependencies]
@@ -45,13 +42,32 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 # Long table headers and sentences of the generated summary.
 "src/fraud/report.py" = ["E501"]
 "src/fraud/final_eval.py" = ["E501"]
+"app/streamlit_app.py" = ["E501"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.uv]
+default-groups = ["dev", "train", "api", "app"]
+
 [dependency-groups]
+api = [
+    "fastapi>=0.143.0",
+    "uvicorn>=0.54.0",
+]
+app = [
+    "streamlit>=1.65.0",
+]
+train = [
+    "kaggle>=2.2.4",
+    "lightgbm>=4.7.0",
+    "matplotlib>=3.11.2",
+    "seaborn>=0.13.2",
+    "shap>=0.53.0",
+]
 dev = [
+    "httpx2>=2.13.1",
     "jupyter>=1.1.1",
     "nbconvert>=7.17.1",
     "pytest>=9.1.1",

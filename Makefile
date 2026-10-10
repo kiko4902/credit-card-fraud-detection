@@ -3,7 +3,10 @@
 
 NOTEBOOKS := $(wildcard notebooks/*.ipynb)
 
-.PHONY: help install lock data lint format test notebook train-baseline experiments evaluate api app
+IMAGE ?= fraud-api
+PORT ?= 8000
+
+.PHONY: help install lock data lint format test notebook train-baseline experiments evaluate \n	app-data api app docker-build docker-run
 
 help:
 	@echo "install         install dependencies exactly as pinned in uv.lock"
@@ -16,7 +19,11 @@ help:
 	@echo "train-baseline  train the baseline and write its row to reports/results.csv"
 	@echo "experiments     run experiment stages 1-3 and the report (finished runs are skipped)"
 	@echo "evaluate        final evaluation: threshold, TEST SPLIT (logged), SHAP, report"
-	@echo "api, app: later phases"
+	@echo "app-data        export the validation scores used by the app (needs the dataset)"
+	@echo "api             run the FastAPI service on http://127.0.0.1:$(PORT) (docs at /docs)"
+	@echo "app             run the Streamlit app on http://localhost:8501"
+	@echo "docker-build    build the API image ($(IMAGE))"
+	@echo "docker-run      run the API image on http://127.0.0.1:$(PORT)"
 
 # --locked fails if uv.lock is out of date with pyproject.toml instead of silently re-resolving.
 install:
@@ -63,8 +70,19 @@ experiments:
 evaluate:
 	uv run --locked python -m fraud.final_eval
 
-api:
-	@echo "api: not implemented yet (Phase 5)"
+# Validation scores for the threshold page of the app (score, label, amount only).
+app-data:
+	uv run --locked python -m fraud.app_data
 
+api:
+	uv run --locked uvicorn app.api:app --host 127.0.0.1 --port $(PORT)
+
+# Needs only the committed model and app data, not the dataset or the API.
 app:
-	@echo "app: not implemented yet (Phase 5)"
+	uv run --locked streamlit run app/streamlit_app.py --server.address localhost
+
+docker-build:
+	docker build --target api -t $(IMAGE) .
+
+docker-run:
+	docker run --rm -p $(PORT):8000 $(IMAGE)
