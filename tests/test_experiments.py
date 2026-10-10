@@ -22,6 +22,7 @@ from fraud.experiments import (
 )
 from fraud.models import MODELS
 from fraud.selection import (
+    SELECTION_STAGES,
     STAGE1_STRATEGIES,
     STAGE2_STRATEGIES,
     STRATEGY_ORDER,
@@ -168,15 +169,18 @@ def test_classifiers_are_ranked_by_their_best_strategy() -> None:
 
 def test_stage2_takes_the_top_four_classifiers_and_the_whole_smote_family() -> None:
     configs = stage2_configs(SCREENING)
-    assert len(configs) == 40
+    main = [config for config in configs if config.stage == "stage2"]
+    extras = [config for config in configs if config.stage == "stage2_extra"]
+    assert (len(main), len(extras)) == (40, 10)
+    assert {config.model for config in extras} == {"knn"}  # logistic regression is in the top 4
     assert [config.model for config in configs[::10]] == [
         "xgboost",
         "random_forest",
         "lightgbm",
         "logreg",
+        "knn",
     ]
     assert [(c.strategy, c.sampling_ratio) for c in configs[:10]] == STAGE2_STRATEGIES
-    assert all(config.stage == "stage2" for config in configs)
     assert not {config.id for config in configs} & set(
         SCREENING["config_id"]
     )  # SMOTE 0.1 not repeated
@@ -207,6 +211,16 @@ def test_stage3_tunes_the_two_best_classifiers_with_their_best_strategy() -> Non
     assert {(c.strategy, c.sampling_ratio) for c in forest} == {("none", None)}
     assert (len(xgboost), len(forest)) == (12, 8)
     assert len({config.id for config in configs}) == len(configs)
+
+
+def test_extra_classifiers_never_compete() -> None:
+    # An extra run with an outstanding score must not be tuned or selected.
+    extra = fake_results([("knn", "smote_enn", 0.5, 0.99)], "stage2_extra")
+    everything = pd.concat([SCREENING, extra], ignore_index=True)
+    assert {config.model for config in stage3_configs(everything)} == {"xgboost", "random_forest"}
+    selectable = everything[everything["stage"].isin(SELECTION_STAGES)]
+    assert select_best(selectable)["model"] == "xgboost"
+    assert "stage2_extra" not in SELECTION_STAGES
 
 
 def test_select_configs_filters() -> None:

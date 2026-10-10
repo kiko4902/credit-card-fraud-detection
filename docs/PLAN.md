@@ -114,6 +114,14 @@ is already in stage 1), SMOTE-Tomek, SMOTE-ENN, Safe-Level-SMOTE and Polynom-Fit
 at ratios 0.1 and 0.5): 10 new configurations per classifier, 40 in total. Ratios are
 minority:majority after resampling.
 
+*Stage 2 extras (added after stage 1 was seen).* Stage 1 ranked four tree ensembles first;
+logistic regression missed fourth place by 0.0001 mean CV PR-AUC and k-NN came seventh. The
+thesis question about linear and neighbour-based classifiers cannot be answered from tree
+ensembles alone, so logistic regression and k-NN get the same 10 stage 2 runs each, recorded
+with `stage = stage2_extra`. These rows are used only for the comparison with the thesis:
+they are excluded from the ranking, from the paired top-3 comparisons, from tuning and from
+the selection of the final model.
+
 *Stage 3 - tuning.* A small, fixed hyperparameter search for the two best classifiers, each
 with its best strategy, scored with the same CV. Every tried setting is recorded.
 

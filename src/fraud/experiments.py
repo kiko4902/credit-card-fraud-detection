@@ -34,6 +34,8 @@ from fraud.data import load_train_val, split_xy, time_ordered_folds
 from fraud.models import MODELS, STRATEGIES, build_pipeline, is_supported
 from fraud.report import build_report
 from fraud.selection import (
+    EXTRA_STAGE,
+    EXTRA_STAGE2_MODELS,
     MODEL_ORDER,
     STAGE1_STRATEGIES,
     STAGE2_STRATEGIES,
@@ -95,10 +97,17 @@ def stage2_models(results: pd.DataFrame) -> list[str]:
 
 
 def stage2_configs(results: pd.DataFrame) -> list[ExperimentConfig]:
-    """SMOTE family: the best stage 1 classifiers with every remaining sampler and ratio."""
+    """SMOTE family: the best stage 1 classifiers with every remaining sampler and ratio.
+
+    Logistic regression and k-NN get the same runs when they are not among the best, labelled
+    as extras: they are needed for the comparison with the thesis but do not compete.
+    """
+    best = stage2_models(results)
+    extras = [m for m in EXTRA_STAGE2_MODELS if m in STAGE1_MODELS and m not in best]
     return [
-        ExperimentConfig(model, strategy, ratio, stage="stage2")
-        for model in stage2_models(results)
+        ExperimentConfig(model, strategy, ratio, stage=stage)
+        for models, stage in ((best, "stage2"), (extras, EXTRA_STAGE))
+        for model in models
         for strategy, ratio in STAGE2_STRATEGIES
     ]
 

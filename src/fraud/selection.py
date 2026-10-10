@@ -40,6 +40,13 @@ STAGE2_STRATEGIES: list[Strategy] = [
     *[(variant, ratio) for variant in SMOTE_VARIANTS for ratio in VARIANT_RATIOS],
 ]
 OVERSAMPLING: list[str] = ["smote", *SMOTE_VARIANTS]
+# Classifiers that also get the stage 2 runs when they are not in the top group, so that the
+# thesis question about linear and neighbour-based classifiers can be answered. Their rows
+# are labelled EXTRA_STAGE and never take part in ranking or model selection.
+EXTRA_STAGE2_MODELS: list[str] = ["logreg", "knn"]
+EXTRA_STAGE: str = "stage2_extra"
+# Stages whose rows compete in the ranking and in the selection of the final model.
+SELECTION_STAGES: list[str] = ["stage1", "stage2", "stage3"]
 # Display order of all strategies in tables and figures.
 STRATEGY_ORDER: list[Strategy] = [
     ("none", None),

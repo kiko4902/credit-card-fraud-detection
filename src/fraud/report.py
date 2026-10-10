@@ -41,8 +41,10 @@ from fraud.plotting import (
     set_style,
 )
 from fraud.selection import (
+    EXTRA_STAGE,
     MODEL_LABELS,
     OVERSAMPLING,
+    SELECTION_STAGES,
     SMOTE_VARIANTS,
     STAGE1_STRATEGIES,
     STRATEGY_ORDER,
@@ -84,11 +86,11 @@ def load_scores(identifier: str, scores_dir: Path) -> np.ndarray:
 def find_row(
     results: pd.DataFrame, model: str, strategy: str, ratio: float | None
 ) -> pd.Series | None:
-    """The untuned (stage 1 or 2) row of one classifier / strategy / ratio, if it exists."""
+    """The untuned row of one classifier / strategy / ratio, if it exists."""
     rows = results[
         (results["model"] == model)
         & (results["strategy"] == strategy)
-        & results["stage"].isin(["stage1", "stage2"])
+        & (results["stage"] != "stage3")
     ]
     rows = (
         rows[rows["sampling_ratio"].isna()]
@@ -464,8 +466,13 @@ def plot_stage1_ranking(stage1: pd.DataFrame, figures_dir: Path) -> Path:
     return path
 
 
-def plot_stage2_heatmap(screened: pd.DataFrame, models: list[str], figures_dir: Path) -> Path:
-    """Mean CV PR-AUC for the stage 2 classifiers (rows) and every strategy (columns)."""
+def plot_stage2_heatmap(
+    screened: pd.DataFrame, models: list[str], n_ranked: int, figures_dir: Path
+) -> Path:
+    """Mean CV PR-AUC for the stage 2 classifiers (rows) and every strategy (columns).
+
+    The first ``n_ranked`` rows are the top classifiers; rows below the line are the extras.
+    """
     set_style()
     values = np.array(
         [
@@ -504,7 +511,13 @@ def plot_stage2_heatmap(screened: pd.DataFrame, models: list[str], figures_dir: 
         rotation=35,
         ha="right",
     )
-    ax.set_yticks(range(len(models)), [MODEL_LABELS[model] for model in models])
+    labels = [
+        MODEL_LABELS[model] + ("" if position < n_ranked else " (extra)")
+        for position, model in enumerate(models)
+    ]
+    ax.set_yticks(range(len(models)), labels)
+    if n_ranked < len(models):
+        ax.axhline(n_ranked - 0.5, color=SURFACE_COLOR, linewidth=4)
     ax.grid(visible=False)
     ax.set_title("Stage 2: mean PR-AUC over 3 time-ordered CV folds (best per classifier in bold)")
     fig.colorbar(image, ax=ax, pad=0.01, label="Mean CV PR-AUC")
@@ -718,14 +731,27 @@ def build_report(
 ) -> list[str]:
     """Create figures, the summary and the saved final model; return progress messages."""
     results = results[(results["eval_split"] == "val") & results["cv_pr_auc_mean"].notna()]
-    results = results.reset_index(drop=True)
+    everything = results.reset_index(drop=True)
+    # Extra stage 2 rows inform the thesis comparison only; they never compete.
+    results = everything[everything["stage"].isin(SELECTION_STAGES)]
+    untuned = everything[everything["stage"] != "stage3"]
     stage1 = results[results["stage"] == "stage1"]
     screened = results[results["stage"].isin(["stage1", "stage2"])]
+    by_rank = list(rank_classifiers(stage1)["model"])
     stage2_models = [
-        m
-        for m in rank_classifiers(stage1)["model"]
-        if m in set(results.loc[results["stage"] == "stage2", "model"])
+        m for m in by_rank if m in set(results.loc[results["stage"] == "stage2", "model"])
     ]
+    extra_models = [
+        m for m in by_rank if m in set(everything.loc[everything["stage"] == EXTRA_STAGE, "model"])
+    ]
+    thesis_models = [*stage2_models, *extra_models]
+    extra_note = (
+        f" {' and '.join(MODEL_LABELS[m] for m in extra_models)} did not reach the top "
+        f"{len(stage2_models)} and were run in addition, for the comparison with the thesis only: "
+        "they are not part of the ranking or of the model selection."
+        if extra_models
+        else ""
+    )
     _, val_y = split_xy(val)
     scores_dir = paths.scores_dir
 
@@ -745,9 +771,9 @@ def build_report(
 
     figures = [
         plot_stage1_ranking(stage1, paths.figures_dir),
-        plot_stage2_heatmap(screened, stage2_models, paths.figures_dir),
+        plot_stage2_heatmap(untuned, thesis_models, len(stage2_models), paths.figures_dir),
         plot_pr_curves(best_per_model, stage2_models, val_y, scores_dir, paths.figures_dir),
-        plot_pr_auc_vs_fit_time(results, stage2_models, paths.figures_dir),
+        plot_pr_auc_vs_fit_time(everything, stage2_models, paths.figures_dir),
     ]
     config = save_final_model(final, train, val, paths.models_dir)
     size_mb = config["model_file_bytes"] / 1e6
@@ -774,17 +800,17 @@ def build_report(
         "boundary, recall and the number of flagged transactions change much more than PR-AUC.",
         markdown_table(boundary_shift_table(stage1)),
         f"## Stage 2: SMOTE family for the top {len(stage2_models)} classifiers",
-        "Mean CV PR-AUC.",
-        markdown_table(stage2_table(screened, stage2_models)),
+        f"Mean CV PR-AUC.{extra_note}",
+        markdown_table(stage2_table(untuned, thesis_models)),
         "### Each variant against plain SMOTE at the same ratio",
         f'CV difference is variant minus SMOTE; "folds won" is out of 3. The validation difference is a paired bootstrap. {star}',
-        markdown_table(variant_table(screened, stage2_models, val_y, scores_dir, n_boot)),
+        markdown_table(variant_table(untuned, thesis_models, val_y, scores_dir, n_boot)),
         "### Oversampling against no resampling and class weights",
         f"The best oversampling run of each classifier (chosen by CV). {star}",
-        markdown_table(oversampling_table(screened, stage2_models, val_y, scores_dir, n_boot)),
+        markdown_table(oversampling_table(untuned, thesis_models, val_y, scores_dir, n_boot)),
         "### How much the choice of oversampling method matters per classifier",
         "Spread of the mean CV PR-AUC over all oversampling runs of a classifier.",
-        markdown_table(sensitivity_table(screened, stage2_models)),
+        markdown_table(sensitivity_table(untuned, thesis_models)),
         "## Overall ranking (stages 1 and 2, top 15)",
         "Ordered by the selection rule: mean CV PR-AUC, ties within 0.005 broken toward the simpler strategy.",
         markdown_table(ranking_table(ranked.head(15))),
