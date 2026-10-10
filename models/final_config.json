@@ -84,7 +84,7 @@
   "cv_pr_auc_mean": 0.7665483968910696,
   "val_pr_auc": 0.8505413396978313,
   "val_pr_auc_in_results": 0.8505413396978313,
-  "threshold": null,
+  "threshold": 0.01783029083162546,
   "random_seed": 42,
   "git_commit": "baf4ef3",
   "versions": {
@@ -97,5 +97,103 @@
     "numpy": "2.5.3"
   },
   "model_file": "final_pipeline.joblib",
-  "model_file_bytes": 215794
+  "model_file_bytes": 215794,
+  "model_version": "1.0.0",
+  "decision": {
+    "rule": "flag the transaction when fraud score >= threshold",
+    "threshold_chosen_on": "validation split, minimum total cost",
+    "f1_optimal_threshold_for_comparison": 0.768062025308609,
+    "refit_on_train_plus_val": false
+  },
+  "cost_model": {
+    "currency": "EUR",
+    "review_cost_per_flagged_transaction": 5.0,
+    "missed_fraud": "transaction amount",
+    "passed_legitimate_transaction": 0.0
+  },
+  "training_data": {
+    "source": "Kaggle mlg-ulb/creditcardfraud, creditcard.csv",
+    "raw_file_sha256": "76274b691b16a6c49d3f159c883398e03ccd6d1ee12d9d8ee38f4b4b98551a89",
+    "train_split_sha256": "d597dfb11fbc8d1ff73eb5bb2cf3690d896d4e8cf55cd1be263c64c3f9e7dc36",
+    "rows": 198607,
+    "fraud": 366
+  },
+  "metrics": {
+    "validation_at_threshold": {
+      "pr_auc": {
+        "value": 0.850541,
+        "ci_low": 0.759412,
+        "ci_high": 0.932769
+      },
+      "roc_auc": {
+        "value": 0.986371,
+        "ci_low": 0.970097,
+        "ci_high": 0.998641
+      },
+      "precision": {
+        "value": 0.691176,
+        "ci_low": 0.602564,
+        "ci_high": 0.796695
+      },
+      "recall": {
+        "value": 0.854545,
+        "ci_low": 0.745455,
+        "ci_high": 0.945455
+      },
+      "f1": {
+        "value": 0.764228,
+        "ci_low": 0.689076,
+        "ci_high": 0.837634
+      },
+      "cost": {
+        "value": 502.32,
+        "ci_low": 351.536,
+        "ci_high": 730.27525
+      },
+      "savings_vs_no_model": {
+        "value": 7893.79,
+        "ci_low": 3943.8175,
+        "ci_high": 12372.277
+      }
+    },
+    "test_at_threshold": {
+      "pr_auc": {
+        "value": 0.758294,
+        "ci_low": 0.63988,
+        "ci_high": 0.861972
+      },
+      "roc_auc": {
+        "value": 0.976477,
+        "ci_low": 0.958831,
+        "ci_high": 0.99017
+      },
+      "precision": {
+        "value": 0.557143,
+        "ci_low": 0.463396,
+        "ci_high": 0.661544
+      },
+      "recall": {
+        "value": 0.75,
+        "ci_low": 0.634615,
+        "ci_high": 0.865385
+      },
+      "f1": {
+        "value": 0.639344,
+        "ci_low": 0.548381,
+        "ci_high": 0.727311
+      },
+      "cost": {
+        "value": 2722.4,
+        "ci_low": 623.40725,
+        "ci_high": 5380.9945
+      },
+      "savings_vs_no_model": {
+        "value": 3446.48,
+        "ci_low": 1049.953,
+        "ci_high": 7272.48675
+      }
+    },
+    "evaluated_at_commit": "a94dc49"
+  },
+  "output": "A fraud score between 0 and 1 that ranks transactions. It is not a calibrated probability: the model is trained on oversampled data."
 }
