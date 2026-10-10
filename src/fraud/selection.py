@@ -1,50 +1,69 @@
-"""Fixed ordering of the experiment grid and the model selection rule (PLAN.md section 14)."""
+"""Fixed ordering of the staged experiments and the selection rule (PLAN.md sections 6, 14)."""
 
 import pandas as pd
 
 from fraud.config import CV_TIE_TOLERANCE
 
-MODEL_ORDER: list[str] = ["logreg", "random_forest", "lightgbm"]
+MODEL_ORDER: list[str] = [
+    "logreg",
+    "decision_tree",
+    "gaussian_nb",
+    "knn",
+    "random_forest",
+    "extra_trees",
+    "xgboost",
+    "lightgbm",
+    "mlp",
+]
 MODEL_LABELS: dict[str, str] = {
     "logreg": "Logistic regression",
+    "decision_tree": "Decision tree",
+    "gaussian_nb": "Gaussian NB",
+    "knn": "k-NN",
     "random_forest": "Random forest",
+    "extra_trees": "Extra trees",
+    "xgboost": "XGBoost",
     "lightgbm": "LightGBM",
+    "mlp": "MLP",
 }
 
-GRID_RATIOS: tuple[float, float] = (0.1, 0.5)
-RESAMPLING_STRATEGIES: list[str] = [
-    "undersample",
-    "smote",
-    "borderline_smote",
-    "adasyn",
-    "smote_tomek",
+Strategy = tuple[str, float | None]
+
+# Stage 1: every classifier with these strategies (class weights only where supported).
+STAGE1_STRATEGIES: list[Strategy] = [("none", None), ("class_weight", None), ("smote", 0.1)]
+# Stage 2: the SMOTE family, for the best classifiers of stage 1.
+SMOTE_VARIANTS: list[str] = ["smote_tomek", "smote_enn", "safe_level_smote", "polynom_fit_smote"]
+VARIANT_RATIOS: tuple[float, float] = (0.1, 0.5)
+STAGE2_STRATEGIES: list[Strategy] = [
+    ("smote", 0.5),
+    ("smote", 1.0),
+    *[(variant, ratio) for variant in SMOTE_VARIANTS for ratio in VARIANT_RATIOS],
 ]
-SMOTE_FAMILY: list[str] = ["smote", "borderline_smote", "adasyn", "smote_tomek"]
-# The 12 strategies of the grid, in the order used in every table and figure.
-STRATEGY_ORDER: list[tuple[str, float | None]] = [
+OVERSAMPLING: list[str] = ["smote", *SMOTE_VARIANTS]
+# Display order of all strategies in tables and figures.
+STRATEGY_ORDER: list[Strategy] = [
     ("none", None),
     ("class_weight", None),
-    *[(strategy, ratio) for strategy in RESAMPLING_STRATEGIES for ratio in GRID_RATIOS],
+    ("smote", 0.1),
+    *STAGE2_STRATEGIES,
 ]
 STRATEGY_LABELS: dict[str, str] = {
     "none": "No resampling",
     "class_weight": "Class weights",
-    "undersample": "Undersampling",
     "smote": "SMOTE",
-    "borderline_smote": "Borderline-SMOTE",
-    "adasyn": "ADASYN",
     "smote_tomek": "SMOTE-Tomek",
+    "smote_enn": "SMOTE-ENN",
+    "safe_level_smote": "Safe-Level-SMOTE",
+    "polynom_fit_smote": "Polynom-Fit SMOTE",
 }
 
 
 def strategy_label(strategy: str, sampling_ratio: float | None) -> str:
     """Readable name of a strategy, e.g. ``SMOTE 0.1``."""
     label = STRATEGY_LABELS[strategy]
-    return (
-        label
-        if sampling_ratio is None or pd.isna(sampling_ratio)
-        else f"{label} {sampling_ratio:g}"
-    )
+    if sampling_ratio is None or pd.isna(sampling_ratio):
+        return label
+    return f"{label} {sampling_ratio:g}"
 
 
 def config_label(row: pd.Series) -> str:
@@ -83,5 +102,19 @@ def rank_by_rule(results: pd.DataFrame, tolerance: float = CV_TIE_TOLERANCE) -> 
         picked.append(best)
         remaining = remaining[remaining["config_id"] != best["config_id"]]
     ranked = pd.DataFrame(picked, columns=results.columns).reset_index(drop=True)
+    ranked.index = ranked.index + 1
+    return ranked.rename_axis("rank")
+
+
+def rank_classifiers(results: pd.DataFrame) -> pd.DataFrame:
+    """One row per classifier: its configuration with the best mean CV PR-AUC, best first.
+
+    This is the stage 1 ranking. It uses the plain maximum (no tie-break): the question is
+    how good a classifier can be, not which of its strategies to prefer.
+    """
+    candidates = results.dropna(subset=["cv_pr_auc_mean"])
+    best = candidates.loc[candidates.groupby("model")["cv_pr_auc_mean"].idxmax()]
+    ranked = best.sort_values("cv_pr_auc_mean", ascending=False, kind="stable")
+    ranked = ranked.reset_index(drop=True)
     ranked.index = ranked.index + 1
     return ranked.rename_axis("rank")

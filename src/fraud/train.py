@@ -23,6 +23,7 @@ from imblearn.pipeline import Pipeline
 from sklearn.base import clone
 from sklearn.metrics import average_precision_score
 
+from fraud.cache import ResampleCache, fit_preprocessing
 from fraud.config import (
     CV_N_SPLITS,
     DEFAULT_THRESHOLD,
@@ -69,7 +70,9 @@ RESULT_COLUMNS: list[str] = [
     "cv_pr_auc_std",
     "cv_pr_auc_folds",
     "cv_time_s",
-    "train_time_s",
+    "resample_time_s",
+    "fit_time_s",
+    "predict_time_s",
     "n_boot",
     "random_seed",
 ]
@@ -126,12 +129,46 @@ def fraud_scores(pipeline: Pipeline, features: pd.DataFrame) -> np.ndarray:
     return pipeline.predict_proba(features)[:, 1]
 
 
+@dataclass(frozen=True)
+class FittedPipeline:
+    """A fitted pipeline with the time spent on preprocessing and on the classifier."""
+
+    pipeline: Pipeline
+    resample_time_s: float
+    fit_time_s: float
+
+
+def fit_pipeline(
+    pipeline: Pipeline,
+    features: pd.DataFrame,
+    target: pd.Series,
+    cache: ResampleCache | None = None,
+) -> FittedPipeline:
+    """Fit ``pipeline`` on the given rows, reusing cached resampled data when possible.
+
+    Equivalent to ``clone(pipeline).fit(features, target)``: the preprocessing steps
+    (features, scaling, sampler) are fitted on these rows only and the classifier is fitted
+    on their output. With a cache, the preprocessing result is shared between classifiers.
+    ``resample_time_s`` is the time the preprocessing took when it was computed.
+    """
+    prepared = fit_preprocessing(pipeline.steps[:-1], features, target, cache)
+    name, model = pipeline.steps[-1]
+    model = clone(model)
+    start = time.perf_counter()
+    model.fit(prepared.X, prepared.y)
+    fit_time = time.perf_counter() - start
+    return FittedPipeline(Pipeline([*prepared.steps, (name, model)]), prepared.seconds, fit_time)
+
+
 def cross_validate(
-    pipeline: Pipeline, train: pd.DataFrame, n_splits: int = CV_N_SPLITS
+    pipeline: Pipeline,
+    train: pd.DataFrame,
+    n_splits: int = CV_N_SPLITS,
+    cache: ResampleCache | None = None,
 ) -> pd.DataFrame:
     """PR-AUC of ``pipeline`` on time-ordered folds of the training split.
 
-    Each fold fits a fresh clone on its own training part, so scaling and resampling never
+    Each fold fits fresh clones on its own training part, so scaling and resampling never
     see the fold's validation part.
     """
     folds = time_ordered_folds(train, n_splits=n_splits)
@@ -139,8 +176,8 @@ def cross_validate(
     features, target = split_xy(train)
     scores = []
     for train_idx, val_idx in folds:
-        fitted = clone(pipeline).fit(features.iloc[train_idx], target.iloc[train_idx])
-        fold_scores = fraud_scores(fitted, features.iloc[val_idx])
+        fitted = fit_pipeline(pipeline, features.iloc[train_idx], target.iloc[train_idx], cache)
+        fold_scores = fraud_scores(fitted.pipeline, features.iloc[val_idx])
         scores.append(average_precision_score(target.iloc[val_idx], fold_scores))
     return table.assign(pr_auc=scores)
 
@@ -155,22 +192,24 @@ def run_experiment(
     n_boot: int = N_BOOTSTRAP,
     threshold: float = DEFAULT_THRESHOLD,
     model_params: dict[str, Any] | None = None,
-    stage: str = "grid",
+    stage: str = "stage1",
+    cache: ResampleCache | None = None,
 ) -> ExperimentResult:
     """Fit on ``train`` and evaluate on ``val``."""
     pipeline = build_pipeline(model, strategy, sampling_ratio, model_params=model_params)
     params = params_json(pipeline)
 
     start = time.perf_counter()
-    cv_table = cross_validate(pipeline, train) if run_cv else None
+    cv_table = cross_validate(pipeline, train, cache=cache) if run_cv else None
     cv_time = time.perf_counter() - start
 
     train_x, train_y = split_xy(train)
     val_x, val_y = split_xy(val)
+    fitted = fit_pipeline(pipeline, train_x, train_y, cache)
+    pipeline = fitted.pipeline
     start = time.perf_counter()
-    pipeline.fit(train_x, train_y)
-    train_time = time.perf_counter() - start
     val_scores = fraud_scores(pipeline, val_x)
+    predict_time = time.perf_counter() - start
     metrics = evaluate_scores(val_y, val_scores, threshold=threshold, n_boot=n_boot)
 
     fold_scores = [] if cv_table is None else [round(score, 6) for score in cv_table["pr_auc"]]
@@ -195,7 +234,9 @@ def run_experiment(
         "cv_pr_auc_std": cv_table["pr_auc"].std() if cv_table is not None else None,
         "cv_pr_auc_folds": json.dumps(fold_scores),
         "cv_time_s": round(cv_time, 2),
-        "train_time_s": round(train_time, 2),
+        "resample_time_s": round(fitted.resample_time_s, 2),
+        "fit_time_s": round(fitted.fit_time_s, 2),
+        "predict_time_s": round(predict_time, 2),
         "n_boot": n_boot,
         "random_seed": RANDOM_SEED,
     }
@@ -230,7 +271,7 @@ def format_report(row: dict[str, Any], cv_table: pd.DataFrame | None) -> str:
     lines = [
         f"Model: {row['model']} | strategy: {row['strategy']}{ratio} | commit {row['git_commit']}",
         f"Train: {row['n_train']:,} rows, {row['n_train_fraud']} fraud "
-        f"| fitted in {row['train_time_s']:.1f} s",
+        f"| fit {row['fit_time_s']:.1f} s, validation scored in {row['predict_time_s']:.1f} s",
     ]
     if cv_table is not None:
         lines += [

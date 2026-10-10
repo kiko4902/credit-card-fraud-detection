@@ -18,12 +18,12 @@ dependencies = [
     "shap>=0.53.0",
     "streamlit>=1.65.0",
     "uvicorn>=0.54.0",
+    "xgboost>=3.4.1",
 ]
 
 [project.optional-dependencies]
 extras = [
     "mlflow>=3.17.0",
-    "xgboost>=3.4.1",
 ]
 
 [build-system]
@@ -41,6 +41,10 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# Long table headers and sentences of the generated summary.
+"src/fraud/report.py" = ["E501"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
@@ -51,4 +55,5 @@ dev = [
     "nbconvert>=7.17.1",
     "pytest>=9.1.1",
     "ruff>=0.17.0",
+    "smote-variants>=1.0.1",
 ]

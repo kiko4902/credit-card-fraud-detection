@@ -11,16 +11,18 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 ## Tech stack
 
 - Python 3.12, dependencies managed with uv (`pyproject.toml` + `uv.lock`)
-- pandas, numpy, scikit-learn, imbalanced-learn, lightgbm, shap, matplotlib, seaborn
+- pandas, numpy, scikit-learn, imbalanced-learn, lightgbm, xgboost, shap, matplotlib, seaborn
 - FastAPI + uvicorn (API), Streamlit (UI), Docker, GitHub Actions
-- pytest, ruff; optional extra `extras` = xgboost, mlflow (`uv sync --extra extras`)
+- pytest, ruff; dev-only `smote-variants` (Safe-Level / Polynom-Fit SMOTE; pulls TensorFlow,
+  imported lazily in `fraud.samplers`); optional extra `extras` = mlflow
 
 ## Repository structure
 
 ```
 docs/PLAN.md          project plan            docs/images/     README images
 data/raw|processed/   gitignored              notebooks/       01_eda.ipynb (Phase 1)
-src/fraud/            config, data, features, models, evaluate, train, plotting (+ explain later)
+src/fraud/            config, data, features, samplers, models, cache, evaluate, train,
+                      selection, experiments, report, plotting (+ explain later)
 models/               final model artifact    reports/         results.csv, figures/
 app/                  api.py, streamlit_app.py
 tests/                pytest, synthetic fixtures in conftest.py
@@ -63,11 +65,11 @@ importing it triggers authentication.
 | `make install` | `uv sync --locked`; fails if `pyproject.toml` and `uv.lock` disagree |
 | `make lock` | upgrade dependencies and rewrite `uv.lock` |
 | `make data` | download the dataset into `data/raw/` (skipped if present) and validate it |
-| `make lint` / `make format` | ruff check + format check / autofix |
-| `make test` | pytest |
+| `make lint` / `format` / `test` | ruff check + format check / ruff autofix / pytest |
 | `make notebook` | execute notebooks in place, outputs kept (needs data; never run in CI) |
 | `make train-baseline` | logistic regression, no resampling; upserts its row in `reports/results.csv` |
-| `make experiments`, `api`, `app` | not implemented yet |
+| `make experiments` | stages 1-3 + report, resumable (design: PLAN.md §6, rule: §14) |
+| `make api`, `app` | not implemented yet |
 
 ## Current status
 

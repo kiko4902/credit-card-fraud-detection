@@ -24,7 +24,7 @@ Kaggle **Credit Card Fraud Detection** (`mlg-ulb/creditcardfraud`):
 
 ## 3. Tech stack
 
-- Python 3.12: `pandas`, `numpy`, `scikit-learn`, `imbalanced-learn`, `lightgbm`, `xgboost` (optional), `shap`, `matplotlib`/`seaborn`, `pytest`, `ruff`
+- Python 3.12: `pandas`, `numpy`, `scikit-learn`, `imbalanced-learn`, `lightgbm`, `xgboost`, `shap`, `matplotlib`/`seaborn`, `pytest`, `ruff`
 - Experiment tracking: `mlflow` (optional, local) or a results CSV
 - Serving: `FastAPI` + `uvicorn`
 - UI: `Streamlit`
@@ -78,23 +78,62 @@ credit-card-fraud-detection/
 
 ## 6. Experiments
 
-Models:
-- Logistic Regression
-- Random Forest
-- LightGBM
+The project extends the author's MSc thesis on SMOTE-based methods (18 datasets, 8
+classifiers, imbalance ratios up to 28:1) to a much more extreme case: about 540:1.
 
-Imbalance strategies (each combined with each model):
-1. None (baseline)
-2. Class weights / `scale_pos_weight` (cost-sensitive)
-3. Random undersampling
-4. SMOTE
-5. Borderline-SMOTE
-6. ADASYN
-7. SMOTE-Tomek
+**Thesis findings to test here**
 
-Also try at least two sampling ratios for the SMOTE-family methods (e.g. minority:majority 0.1 and 0.5), not only full balancing.
+- Polynom-Fit SMOTE was the only method significantly better than SMOTE on F1, G-Mean and
+  AUC-ROC. Safe-Level-SMOTE was best on F1 / MCC / AUC-PR and its advantage grew with the
+  imbalance ratio. SMOTE-ENN was best on G-Mean. SMOTE-Tomek was indistinguishable from SMOTE.
+- Borderline-SMOTE, ADASYN and random undersampling performed poorly. They are excluded.
+- On average, oversampling barely changed AUC-PR (+0.001). Hypothesis: it mainly shifts the
+  decision boundary instead of improving the ranking.
+- The choice of oversampling method mattered most for logistic regression and k-NN, least
+  for tree ensembles.
 
-All results go to `reports/results.csv` (model, strategy, params, metrics, train time).
+**Design: a staged search**, so that many classifiers are covered without excessive runtime.
+Every configuration is scored with the same 3 time-ordered CV folds on the training split
+and on the validation split. The test split is not used.
+
+*Stage 1 - screening.* 9 classifiers x 3 strategies (none, class weights, SMOTE at ratio 0.1),
+library default parameters:
+logistic regression, decision tree, Gaussian naive Bayes, k-nearest neighbours, random
+forest, extra trees, XGBoost, LightGBM and a multi-layer perceptron (with early stopping).
+Class weights only where the classifier supports them (not Gaussian NB, k-NN, MLP), which
+gives 24 configurations. XGBoost has no `class_weight`; its `scale_pos_weight` is computed
+from the data of each fit. Classifiers are ranked by their best mean CV PR-AUC across the
+strategies.
+
+SVM with an RBF kernel is excluded: kernel SVM training scales between quadratically and
+cubically with the number of rows, and probability estimates need an additional internal
+5-fold fit, so a single configuration on about 200,000 rows would take hours.
+
+*Stage 2 - SMOTE family.* The top 4 classifiers of stage 1 x SMOTE (ratios 0.5 and 1.0; 0.1
+is already in stage 1), SMOTE-Tomek, SMOTE-ENN, Safe-Level-SMOTE and Polynom-Fit SMOTE (each
+at ratios 0.1 and 0.5): 10 new configurations per classifier, 40 in total. Ratios are
+minority:majority after resampling.
+
+*Stage 3 - tuning.* A small, fixed hyperparameter search for the two best classifiers, each
+with its best strategy, scored with the same CV. Every tried setting is recorded.
+
+**Sampler details**
+
+- k = 5 neighbours for the neighbour-based oversamplers (SMOTE, the SMOTE step of
+  SMOTE-Tomek and SMOTE-ENN, Safe-Level-SMOTE). The thesis reported the best result over
+  k in {3, 5, 7}; here k is fixed, so the SMOTE-family results are not tuned over k.
+  The cleaning step of SMOTE-ENN uses the standard 3-nearest-neighbour editing rule.
+- SMOTE, SMOTE-Tomek and SMOTE-ENN come from imbalanced-learn. Safe-Level-SMOTE and
+  Polynom-Fit SMOTE (star topology) come from the `smote-variants` package, wrapped so that
+  they take the same minority:majority ratio and produce exactly that many minority rows.
+- Features are standardised before every sampler (fitted on the training part only), for
+  every classifier, so all classifiers see the same resampled data.
+- Resampled training sets are cached per training part, sampler, ratio and seed and reused
+  across classifiers. The cache key includes the data itself, so a fold can never receive
+  another fold's resampled set.
+
+All results go to `reports/results.csv` (stage, model, strategy, ratio, parameters, metrics,
+resampling / fit / predict time).
 
 ## 7. Metrics
 
@@ -189,16 +228,12 @@ where they differ.
    LightGBM uses `class_weight="balanced"`; cross-validation uses 3 time-ordered folds with at
    least 30 fraud cases in each validation fold.
 
-## 14. Experiment grid and selection rule (Phase 3)
+## 14. Selection rule (Phase 3)
 
-Written down before any Phase 3 result was looked at.
-
-**Grid.** 3 models (logistic regression, random forest, LightGBM) x 12 strategies = 36
-configurations: none; class weights; random undersampling, SMOTE, Borderline-SMOTE, ADASYN
-and SMOTE-Tomek, each at minority:majority ratios 0.1 and 0.5. Model hyperparameters are the
-fixed defaults from `fraud.models` during the strategy comparison.
-
-**Selection rule.**
+The rule below was committed before the first Phase 3 run and is unchanged. The experiment
+design was replaced afterwards (section 6). At that point 11 logistic regression results of
+the interrupted first run had been seen (no resampling, class weights, undersampling, SMOTE,
+Borderline-SMOTE, ADASYN, one SMOTE-Tomek); no other result existed.
 
 1. *Primary:* the mean PR-AUC over the 3 time-ordered CV folds of the training split (218
    fraud cases across the validation folds, against 55 in the validation split).
@@ -210,18 +245,16 @@ fixed defaults from `fraud.models` during the strategy comparison.
    the CV winner is clearly worse on validation than the configuration that is best on
    validation (paired bootstrap CI of the difference excludes zero), this is flagged in the
    summary and the choice is made by the author, not automatically.
-4. *Paired comparisons:* for the top 3 grid configurations by the rule above, a paired
-   stratified bootstrap on the validation split against (a) the same model with no resampling
-   and (b) the overall baseline (logistic regression, no resampling), reporting the
-   difference in PR-AUC with its 95 % CI.
+4. *Paired comparisons:* for the top 3 configurations of stages 1 and 2 by the rule above, a
+   paired stratified bootstrap on the validation split against (a) the same classifier with
+   no resampling and (b) the overall baseline (logistic regression, no resampling), reporting
+   the difference in PR-AUC with its 95 % CI.
 
-**Tuning.** Only after the strategy comparison, and only for the two model families with the
-best CV result, each with its best strategy from the grid. Fixed, small search spaces
-(logistic regression: 5 values of `C`; LightGBM: 12 seeded random draws over `num_leaves`,
-`learning_rate`, `n_estimators`, `min_child_samples`; random forest: 8 seeded random draws
-over `max_depth`, `min_samples_leaf`, `max_features`), scored with the same CV. Every tried
-setting is recorded in `reports/results.csv` with `stage = tuning`.
+**Stage transitions.** Stage 2 takes the 4 classifiers with the best mean CV PR-AUC over
+their stage 1 strategies. Stage 3 takes the two best classifiers by the rule above, each
+with its best strategy, and tries a fixed set of settings (5 to 12 per classifier, defined in
+`fraud.experiments.tuning_space`), recorded with `stage = stage3`.
 
-**Final model.** The configuration that wins under the same rule over all rows (grid and
-tuning), fitted on the training split. No decision threshold is chosen in Phase 3 and the
-test split is not used.
+**Final model.** The configuration that wins under the same rule over all rows, fitted on
+the training split. No decision threshold is chosen in Phase 3 and the test split is not
+used.

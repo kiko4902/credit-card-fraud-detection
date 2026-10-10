@@ -12,7 +12,6 @@ from sklearn.metrics import (
     average_precision_score,
     confusion_matrix,
     precision_recall_fscore_support,
-    recall_score,
     roc_auc_score,
 )
 
@@ -83,6 +82,30 @@ def _percentile_interval(values: Sequence[float], confidence: float) -> tuple[fl
     return float(low), float(high)
 
 
+class WeightedAveragePrecision:
+    """Average precision of fixed scores under varying integer row weights.
+
+    A bootstrap resample is the original rows with a count for each row. Sorting the scores
+    once and reweighting per resample gives the same value as recomputing average precision
+    on the resampled arrays, about twenty times faster.
+    """
+
+    def __init__(self, y_true: np.ndarray, y_score: np.ndarray) -> None:
+        self._order = np.argsort(-y_score, kind="stable")
+        sorted_scores = y_score[self._order]
+        self._positive = (y_true[self._order] == 1).astype(float)
+        # Last position of every run of equal scores: one precision/recall point per threshold.
+        self._group_end = np.r_[np.flatnonzero(np.diff(sorted_scores)), len(sorted_scores) - 1]
+
+    def __call__(self, counts: np.ndarray) -> float:
+        weights = counts[self._order].astype(float)
+        true_positives = np.cumsum(weights * self._positive)[self._group_end]
+        flagged = np.cumsum(weights)[self._group_end]
+        precision = np.divide(true_positives, flagged, out=np.ones_like(flagged), where=flagged > 0)
+        recall = true_positives / true_positives[-1]
+        return float(np.sum(np.diff(recall, prepend=0.0) * precision))
+
+
 def bootstrap_cis(
     y_true: ArrayLike,
     y_score: ArrayLike,
@@ -111,12 +134,11 @@ def paired_bootstrap_difference(
     y_true: ArrayLike,
     score_a: ArrayLike,
     score_b: ArrayLike,
-    metric: Metric = average_precision_score,
     n_boot: int = N_BOOTSTRAP,
     confidence: float = CONFIDENCE_LEVEL,
     seed: int = RANDOM_SEED,
 ) -> dict[str, float]:
-    """Difference ``metric(a) - metric(b)`` with a paired bootstrap confidence interval.
+    """PR-AUC difference ``a - b`` with a paired bootstrap confidence interval.
 
     Both score vectors are evaluated on the same stratified resamples, so the interval
     reflects how much the two models differ on the same transactions. This is much tighter
@@ -126,13 +148,15 @@ def paired_bootstrap_difference(
     y_true = np.asarray(y_true)
     score_a = np.asarray(score_a)
     score_b = np.asarray(score_b)
-    differences = [
-        metric(y_true[index], score_a[index]) - metric(y_true[index], score_b[index])
-        for index in stratified_resamples(y_true, n_boot, seed)
-    ]
+    precision_a = WeightedAveragePrecision(y_true, score_a)
+    precision_b = WeightedAveragePrecision(y_true, score_b)
+    differences = []
+    for index in stratified_resamples(y_true, n_boot, seed):
+        counts = np.bincount(index, minlength=len(y_true))
+        differences.append(precision_a(counts) - precision_b(counts))
     low, high = _percentile_interval(differences, confidence)
-    value_a = float(metric(y_true, score_a))
-    value_b = float(metric(y_true, score_b))
+    value_a = float(average_precision_score(y_true, score_a))
+    value_b = float(average_precision_score(y_true, score_b))
     return {
         "a": value_a,
         "b": value_b,
@@ -152,16 +176,19 @@ def evaluate_scores(
 ) -> dict[str, float]:
     """All reported metrics for one set of scores, with CIs for PR-AUC and recall."""
 
-    def recall_at_threshold(labels: np.ndarray, scores: np.ndarray) -> float:
-        return float(recall_score(labels, predict_at_threshold(scores, threshold)))
-
-    intervals = bootstrap_cis(
-        y_true,
-        y_score,
-        {"pr_auc": average_precision_score, "recall": recall_at_threshold},
-        n_boot=n_boot,
-        seed=seed,
-    )
+    y_true = np.asarray(y_true)
+    y_score = np.asarray(y_score)
+    average_precision = WeightedAveragePrecision(y_true, y_score)
+    caught = ((y_true == 1) & (predict_at_threshold(y_score, threshold) == 1)).astype(float)
+    fraud = (y_true == 1).astype(float)
+    samples: dict[str, list[float]] = {"pr_auc": [], "recall": []}
+    for index in stratified_resamples(y_true, n_boot, seed):
+        counts = np.bincount(index, minlength=len(y_true))
+        samples["pr_auc"].append(average_precision(counts))
+        samples["recall"].append(float(counts @ caught / (counts @ fraud)))
+    intervals = {
+        name: _percentile_interval(values, CONFIDENCE_LEVEL) for name, values in samples.items()
+    }
     result = {**ranking_metrics(y_true, y_score), **threshold_metrics(y_true, y_score, threshold)}
     for name, (low, high) in intervals.items():
         result[f"{name}_ci_low"] = low

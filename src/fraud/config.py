@@ -16,6 +16,8 @@ RESULTS_CSV: Path = REPORTS_DIR / "results.csv"
 EXPERIMENTS_SUMMARY: Path = REPORTS_DIR / "experiments_summary.md"
 # Validation scores of every configuration, kept for paired comparisons (gitignored).
 VAL_SCORES_DIR: Path = PROCESSED_DIR / "val_scores"
+# Resampled training sets, shared between classifiers (gitignored, a few GB).
+RESAMPLE_CACHE_DIR: Path = PROCESSED_DIR / "resample_cache"
 FINAL_MODEL_NAME: str = "final_pipeline.joblib"
 FINAL_CONFIG_NAME: str = "final_config.json"
 
@@ -57,10 +59,13 @@ DEFAULT_THRESHOLD: float = 0.5
 N_BOOTSTRAP: int = 1000
 CONFIDENCE_LEVEL: float = 0.95
 
-# --- Model selection (PLAN.md section 14) --------------------------------------
+# --- Experiment stages and model selection (PLAN.md sections 6 and 14) ----------
 # Configurations within this distance of the best mean CV PR-AUC count as tied.
 CV_TIE_TOLERANCE: float = 0.005
 TOP_N_PAIRED: int = 3
+# Classifiers that go from the screening stage to the SMOTE-family stage.
+STAGE2_CLASSIFIERS: int = 4
+# Classifiers that are tuned, each with its best strategy.
 TUNING_FAMILIES: int = 2
 
 
@@ -70,6 +75,7 @@ class ExperimentPaths:
 
     results: Path = RESULTS_CSV
     scores_dir: Path = VAL_SCORES_DIR
+    cache_dir: Path = RESAMPLE_CACHE_DIR
     figures_dir: Path = FIGURES_DIR
     summary: Path = EXPERIMENTS_SUMMARY
     models_dir: Path = MODELS_DIR
