@@ -14,6 +14,13 @@ FRAUD_COLOR: str = "#eb6834"
 NEUTRAL_COLOR: str = "#52514e"
 CLASS_COLORS: dict[int, str] = {0: LEGIT_COLOR, 1: FRAUD_COLOR}
 CLASS_LABELS: dict[int, str] = {0: "Legitimate", 1: "Fraud"}
+# Models get their own colours, distinct from the two class colours.
+MODEL_COLORS: dict[str, str] = {
+    "logreg": "#6250d6",
+    "random_forest": "#1baf7a",
+    "lightgbm": "#c98500",
+}
+TEXT_COLOR: str = "#0b0b0b"
 
 SURFACE_COLOR: str = "#fcfcfb"
 GRID_COLOR: str = "#e4e3df"

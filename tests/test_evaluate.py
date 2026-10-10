@@ -112,3 +112,36 @@ def test_no_model_cost_is_the_sum_of_fraud_amounts() -> None:
     amount = np.array([100.0, 250.0, 40.0, 999.0])
     assert evaluate.no_model_cost(y_true, amount) == pytest.approx(350.0)
     assert evaluate.total_cost(y_true, y_true, amount) == pytest.approx(2 * REVIEW_COST_EUR)
+
+
+def test_paired_bootstrap_of_identical_scores_is_zero(
+    scored: tuple[np.ndarray, np.ndarray],
+) -> None:
+    y_true, y_score = scored
+    result = evaluate.paired_bootstrap_difference(y_true, y_score, y_score, n_boot=100)
+    assert result["difference"] == 0.0
+    assert (result["ci_low"], result["ci_high"]) == (0.0, 0.0)
+    assert result["share_a_better"] == 0.0
+
+
+def test_paired_bootstrap_detects_a_clearly_better_model(
+    scored: tuple[np.ndarray, np.ndarray],
+) -> None:
+    y_true, y_score = scored
+    noise = np.random.default_rng(0).normal(0, 0.3, len(y_score))
+    result = evaluate.paired_bootstrap_difference(y_true, y_score, y_score + noise, n_boot=200)
+    assert result["difference"] == pytest.approx(result["a"] - result["b"])
+    assert result["a"] == pytest.approx(average_precision_score(y_true, y_score))
+    assert 0 < result["ci_low"] < result["difference"] < result["ci_high"]
+    assert result["share_a_better"] == 1.0
+    reverse = evaluate.paired_bootstrap_difference(y_true, y_score + noise, y_score, n_boot=200)
+    assert reverse["difference"] == pytest.approx(-result["difference"])
+    assert reverse["ci_high"] == pytest.approx(-result["ci_low"])
+
+
+def test_paired_bootstrap_is_reproducible(scored: tuple[np.ndarray, np.ndarray]) -> None:
+    y_true, y_score = scored
+    other = np.random.default_rng(1).permutation(y_score)
+    first = evaluate.paired_bootstrap_difference(y_true, y_score, other, n_boot=100, seed=3)
+    assert first == evaluate.paired_bootstrap_difference(y_true, y_score, other, n_boot=100, seed=3)
+    assert first != evaluate.paired_bootstrap_difference(y_true, y_score, other, n_boot=100, seed=4)

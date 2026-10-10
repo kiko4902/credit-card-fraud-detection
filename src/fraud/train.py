@@ -3,18 +3,21 @@
     python -m fraud.train --model logreg --strategy none
 
 One row per configuration is written to ``reports/results.csv``. The test split is never
-loaded here.
+loaded here. The full grid lives in ``fraud.experiments``.
 """
 
 import argparse
+import hashlib
 import json
 import subprocess
 import time
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from imblearn.pipeline import Pipeline
 from sklearn.base import clone
@@ -35,6 +38,8 @@ from fraud.models import MODELS, STRATEGIES, build_pipeline
 RESULT_COLUMNS: list[str] = [
     "timestamp",
     "git_commit",
+    "stage",
+    "config_id",
     "model",
     "strategy",
     "sampling_ratio",
@@ -62,19 +67,24 @@ RESULT_COLUMNS: list[str] = [
     "cv_folds",
     "cv_pr_auc_mean",
     "cv_pr_auc_std",
+    "cv_pr_auc_folds",
+    "cv_time_s",
     "train_time_s",
     "n_boot",
     "random_seed",
 ]
 # A configuration is identified by these columns; re-running it replaces its row.
-KEY_COLUMNS: list[str] = [
-    "model",
-    "strategy",
-    "sampling_ratio",
-    "params",
-    "eval_split",
-    "deduplicated",
-]
+KEY_COLUMNS: list[str] = ["config_id", "eval_split", "deduplicated"]
+
+
+@dataclass(frozen=True)
+class ExperimentResult:
+    """Everything one experiment produces."""
+
+    row: dict[str, Any]
+    cv_table: pd.DataFrame | None
+    val_scores: np.ndarray
+    pipeline: Pipeline
 
 
 def git_commit() -> str:
@@ -94,7 +104,24 @@ def git_commit() -> str:
     return f"{commit}-dirty" if dirty else commit
 
 
-def fraud_scores(pipeline: Pipeline, features: pd.DataFrame) -> Any:
+def params_json(pipeline: Pipeline) -> str:
+    """All parameters of the pipeline's model as canonical JSON."""
+    params = pipeline.named_steps["model"].get_params()
+    return json.dumps(params, sort_keys=True, default=str)
+
+
+def config_id(model: str, strategy: str, sampling_ratio: float | None, params: str) -> str:
+    """Stable identifier of a configuration, e.g. ``lightgbm__smote__0.1__3f2a9c1d``.
+
+    The suffix is a hash of the model's full parameter set, so two settings of the same
+    model and strategy get different ids.
+    """
+    ratio = "na" if sampling_ratio is None else f"{sampling_ratio:g}"
+    digest = hashlib.sha1(params.encode("utf-8")).hexdigest()[:8]
+    return f"{model}__{strategy}__{ratio}__{digest}"
+
+
+def fraud_scores(pipeline: Pipeline, features: pd.DataFrame) -> np.ndarray:
     """Predicted probability of fraud for each row."""
     return pipeline.predict_proba(features)[:, 1]
 
@@ -128,28 +155,34 @@ def run_experiment(
     n_boot: int = N_BOOTSTRAP,
     threshold: float = DEFAULT_THRESHOLD,
     model_params: dict[str, Any] | None = None,
-) -> tuple[dict[str, Any], pd.DataFrame | None]:
-    """Fit on ``train``, evaluate on ``val``; return the results row and the CV table."""
+    stage: str = "grid",
+) -> ExperimentResult:
+    """Fit on ``train`` and evaluate on ``val``."""
     pipeline = build_pipeline(model, strategy, sampling_ratio, model_params=model_params)
+    params = params_json(pipeline)
+
+    start = time.perf_counter()
     cv_table = cross_validate(pipeline, train) if run_cv else None
+    cv_time = time.perf_counter() - start
 
     train_x, train_y = split_xy(train)
     val_x, val_y = split_xy(val)
     start = time.perf_counter()
     pipeline.fit(train_x, train_y)
     train_time = time.perf_counter() - start
-    metrics = evaluate_scores(
-        val_y, fraud_scores(pipeline, val_x), threshold=threshold, n_boot=n_boot
-    )
+    val_scores = fraud_scores(pipeline, val_x)
+    metrics = evaluate_scores(val_y, val_scores, threshold=threshold, n_boot=n_boot)
 
-    params = pipeline.named_steps["model"].get_params()
+    fold_scores = [] if cv_table is None else [round(score, 6) for score in cv_table["pr_auc"]]
     row: dict[str, Any] = {
         "timestamp": datetime.now(UTC).isoformat(timespec="seconds"),
         "git_commit": git_commit(),
+        "stage": stage,
+        "config_id": config_id(model, strategy, sampling_ratio, params),
         "model": model,
         "strategy": strategy,
         "sampling_ratio": sampling_ratio,
-        "params": json.dumps(params, sort_keys=True, default=str),
+        "params": params,
         "eval_split": "val",
         "deduplicated": True,
         "n_train": len(train),
@@ -157,23 +190,34 @@ def run_experiment(
         "n_eval": len(val),
         "n_eval_fraud": int(val_y.sum()),
         **metrics,
-        "cv_folds": len(cv_table) if cv_table is not None else 0,
+        "cv_folds": len(fold_scores),
         "cv_pr_auc_mean": cv_table["pr_auc"].mean() if cv_table is not None else None,
         "cv_pr_auc_std": cv_table["pr_auc"].std() if cv_table is not None else None,
+        "cv_pr_auc_folds": json.dumps(fold_scores),
+        "cv_time_s": round(cv_time, 2),
         "train_time_s": round(train_time, 2),
         "n_boot": n_boot,
         "random_seed": RANDOM_SEED,
     }
-    return {column: row[column] for column in RESULT_COLUMNS}, cv_table
+    ordered = {column: row[column] for column in RESULT_COLUMNS}
+    return ExperimentResult(ordered, cv_table, val_scores, pipeline)
+
+
+def load_results(path: Path = RESULTS_CSV) -> pd.DataFrame:
+    """Read the results CSV; an empty frame with the right columns if it does not exist."""
+    if not path.exists():
+        return pd.DataFrame(columns=RESULT_COLUMNS)
+    results = pd.read_csv(path)
+    if list(results.columns) != RESULT_COLUMNS:
+        raise ValueError(f"{path} has a different schema; move it away before writing.")
+    return results
 
 
 def save_result(row: dict[str, Any], path: Path = RESULTS_CSV) -> None:
     """Write ``row`` to the results CSV, replacing an earlier row of the same configuration."""
     new = pd.DataFrame([row], columns=RESULT_COLUMNS)
-    if path.exists():
-        existing = pd.read_csv(path)
-        if list(existing.columns) != RESULT_COLUMNS:
-            raise ValueError(f"{path} has a different schema; move it away before writing.")
+    existing = load_results(path)
+    if not existing.empty:
         new = pd.concat([existing.astype(object), new.astype(object)], ignore_index=True)
         new = new.drop_duplicates(subset=KEY_COLUMNS, keep="last")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -231,11 +275,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> None:
     args = parse_args(argv)
     train, val = load_train_val()
-    row, cv_table = run_experiment(
+    result = run_experiment(
         args.model, args.strategy, args.sampling_ratio, train, val, run_cv=not args.no_cv
     )
-    save_result(row, args.results)
-    print(format_report(row, cv_table))
+    save_result(result.row, args.results)
+    print(format_report(result.row, result.cv_table))
     print(f"\nSaved to {args.results}")
 
 

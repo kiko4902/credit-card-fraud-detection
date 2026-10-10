@@ -16,7 +16,7 @@ from typing import Any
 from imblearn.combine import SMOTETomek
 from imblearn.over_sampling import ADASYN, SMOTE, BorderlineSMOTE
 from imblearn.pipeline import Pipeline
-from imblearn.under_sampling import RandomUnderSampler
+from imblearn.under_sampling import RandomUnderSampler, TomekLinks
 from lightgbm import LGBMClassifier
 from sklearn.base import BaseEstimator
 from sklearn.ensemble import RandomForestClassifier
@@ -104,7 +104,13 @@ def _adasyn(ratio: SamplingStrategy, seed: int) -> BaseEstimator:
 
 
 def _smote_tomek(ratio: SamplingStrategy, seed: int) -> BaseEstimator:
-    return SMOTETomek(sampling_strategy=ratio, smote=_smote(ratio, seed), random_state=seed)
+    # Tomek-link removal searches neighbours over the whole resampled set; use all cores.
+    return SMOTETomek(
+        sampling_strategy=ratio,
+        smote=_smote(ratio, seed),
+        tomek=TomekLinks(n_jobs=-1),
+        random_state=seed,
+    )
 
 
 STRATEGIES: dict[str, StrategySpec] = {

@@ -4,7 +4,7 @@ Threshold selection from cost is Phase 4; here the cost of a given set of decisi
 already be computed.
 """
 
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import numpy as np
 from numpy.typing import ArrayLike
@@ -61,6 +61,28 @@ def threshold_metrics(
     }
 
 
+def stratified_resamples(y_true: np.ndarray, n_boot: int, seed: int) -> Iterator[np.ndarray]:
+    """Yield ``n_boot`` index arrays, resampling each class separately with replacement."""
+    positives = np.flatnonzero(y_true == 1)
+    negatives = np.flatnonzero(y_true == 0)
+    if len(positives) == 0 or len(negatives) == 0:
+        raise ValueError("Both classes must be present to bootstrap.")
+    rng = np.random.default_rng(seed)
+    for _ in range(n_boot):
+        yield np.concatenate(
+            [
+                rng.choice(positives, size=len(positives), replace=True),
+                rng.choice(negatives, size=len(negatives), replace=True),
+            ]
+        )
+
+
+def _percentile_interval(values: Sequence[float], confidence: float) -> tuple[float, float]:
+    tail = (1 - confidence) / 2
+    low, high = np.quantile(values, [tail, 1 - tail])
+    return float(low), float(high)
+
+
 def bootstrap_cis(
     y_true: ArrayLike,
     y_score: ArrayLike,
@@ -78,27 +100,46 @@ def bootstrap_cis(
     """
     y_true = np.asarray(y_true)
     y_score = np.asarray(y_score)
-    positives = np.flatnonzero(y_true == 1)
-    negatives = np.flatnonzero(y_true == 0)
-    if len(positives) == 0 or len(negatives) == 0:
-        raise ValueError("Both classes must be present to bootstrap.")
-
-    rng = np.random.default_rng(seed)
     samples: dict[str, list[float]] = {name: [] for name in metrics}
-    for _ in range(n_boot):
-        index = np.concatenate(
-            [
-                rng.choice(positives, size=len(positives), replace=True),
-                rng.choice(negatives, size=len(negatives), replace=True),
-            ]
-        )
+    for index in stratified_resamples(y_true, n_boot, seed):
         for name, metric in metrics.items():
             samples[name].append(metric(y_true[index], y_score[index]))
+    return {name: _percentile_interval(values, confidence) for name, values in samples.items()}
 
-    tail = (1 - confidence) / 2
+
+def paired_bootstrap_difference(
+    y_true: ArrayLike,
+    score_a: ArrayLike,
+    score_b: ArrayLike,
+    metric: Metric = average_precision_score,
+    n_boot: int = N_BOOTSTRAP,
+    confidence: float = CONFIDENCE_LEVEL,
+    seed: int = RANDOM_SEED,
+) -> dict[str, float]:
+    """Difference ``metric(a) - metric(b)`` with a paired bootstrap confidence interval.
+
+    Both score vectors are evaluated on the same stratified resamples, so the interval
+    reflects how much the two models differ on the same transactions. This is much tighter
+    than comparing two separate intervals, which ignores that both models find the same
+    cases easy or hard. ``share_a_better`` is the share of resamples in which ``a`` wins.
+    """
+    y_true = np.asarray(y_true)
+    score_a = np.asarray(score_a)
+    score_b = np.asarray(score_b)
+    differences = [
+        metric(y_true[index], score_a[index]) - metric(y_true[index], score_b[index])
+        for index in stratified_resamples(y_true, n_boot, seed)
+    ]
+    low, high = _percentile_interval(differences, confidence)
+    value_a = float(metric(y_true, score_a))
+    value_b = float(metric(y_true, score_b))
     return {
-        name: tuple(float(bound) for bound in np.quantile(values, [tail, 1 - tail]))
-        for name, values in samples.items()
+        "a": value_a,
+        "b": value_b,
+        "difference": value_a - value_b,
+        "ci_low": low,
+        "ci_high": high,
+        "share_a_better": float(np.mean(np.asarray(differences) > 0)),
     }
 
 

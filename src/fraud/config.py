@@ -1,5 +1,6 @@
 """Project-wide configuration: paths, random seed, dataset facts and cost assumptions."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 # --- Paths -------------------------------------------------------------------
@@ -12,6 +13,11 @@ MODELS_DIR: Path = PROJECT_ROOT / "models"
 REPORTS_DIR: Path = PROJECT_ROOT / "reports"
 FIGURES_DIR: Path = REPORTS_DIR / "figures"
 RESULTS_CSV: Path = REPORTS_DIR / "results.csv"
+EXPERIMENTS_SUMMARY: Path = REPORTS_DIR / "experiments_summary.md"
+# Validation scores of every configuration, kept for paired comparisons (gitignored).
+VAL_SCORES_DIR: Path = PROCESSED_DIR / "val_scores"
+FINAL_MODEL_NAME: str = "final_pipeline.joblib"
+FINAL_CONFIG_NAME: str = "final_config.json"
 
 # --- Reproducibility ---------------------------------------------------------
 RANDOM_SEED: int = 42
@@ -50,3 +56,20 @@ MIN_FRAUD_PER_FOLD: int = 30
 DEFAULT_THRESHOLD: float = 0.5
 N_BOOTSTRAP: int = 1000
 CONFIDENCE_LEVEL: float = 0.95
+
+# --- Model selection (PLAN.md section 14) --------------------------------------
+# Configurations within this distance of the best mean CV PR-AUC count as tied.
+CV_TIE_TOLERANCE: float = 0.005
+TOP_N_PAIRED: int = 3
+TUNING_FAMILIES: int = 2
+
+
+@dataclass(frozen=True)
+class ExperimentPaths:
+    """Where the experiment stage reads and writes; tests point these at a temp directory."""
+
+    results: Path = RESULTS_CSV
+    scores_dir: Path = VAL_SCORES_DIR
+    figures_dir: Path = FIGURES_DIR
+    summary: Path = EXPERIMENTS_SUMMARY
+    models_dir: Path = MODELS_DIR

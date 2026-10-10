@@ -193,7 +193,7 @@ where they differ.
 
 Written down before any Phase 3 result was looked at.
 
-**Grid.** 3 models (logistic regression, random forest, LightGBM) x 11 strategies = 33
+**Grid.** 3 models (logistic regression, random forest, LightGBM) x 12 strategies = 36
 configurations: none; class weights; random undersampling, SMOTE, Borderline-SMOTE, ADASYN
 and SMOTE-Tomek, each at minority:majority ratios 0.1 and 0.5. Model hyperparameters are the
 fixed defaults from `fraud.models` during the strategy comparison.

@@ -22,7 +22,9 @@ def train_val() -> tuple[pd.DataFrame, pd.DataFrame]:
 @pytest.fixture(scope="module")
 def baseline(train_val: tuple[pd.DataFrame, pd.DataFrame]) -> tuple[dict, pd.DataFrame]:
     train, val = train_val
-    return run_experiment("logreg", "none", None, train, val, n_boot=50)
+    result = run_experiment("logreg", "none", None, train, val, n_boot=50)
+    assert result.val_scores.shape == (len(val),)
+    return result.row, result.cv_table
 
 
 def test_cross_validate_reports_fraud_and_pr_auc_per_fold(
@@ -43,6 +45,9 @@ def test_run_experiment_row_matches_the_schema(
     train, val = train_val
     assert list(row) == RESULT_COLUMNS
     assert (row["model"], row["strategy"], row["sampling_ratio"]) == ("logreg", "none", None)
+    assert row["stage"] == "grid"
+    assert row["config_id"].startswith("logreg__none__na__")
+    assert json.loads(row["cv_pr_auc_folds"]) == pytest.approx(list(cv_table["pr_auc"]), abs=1e-6)
     assert row["eval_split"] == "val"
     assert row["n_train"] == len(train)
     assert row["n_eval"] == len(val)
@@ -59,8 +64,9 @@ def test_run_experiment_row_matches_the_schema(
 
 def test_run_experiment_without_cv(train_val: tuple[pd.DataFrame, pd.DataFrame]) -> None:
     train, val = train_val
-    row, cv_table = run_experiment("logreg", "smote", 0.5, train, val, run_cv=False, n_boot=20)
-    assert cv_table is None
+    result = run_experiment("logreg", "smote", 0.5, train, val, run_cv=False, n_boot=20)
+    row = result.row
+    assert result.cv_table is None
     assert row["cv_folds"] == 0
     assert row["sampling_ratio"] == 0.5
     assert row["n_eval"] == len(val)  # validation is scored as is, never resampled
@@ -82,9 +88,21 @@ def test_save_result_creates_appends_and_replaces(
     assert saved.loc[0, "pr_auc"] == pytest.approx(0.123)
 
     # A different configuration is added.
-    save_result({**row, "strategy": "smote", "sampling_ratio": 0.5}, path)
-    save_result({**row, "strategy": "smote", "sampling_ratio": 0.1}, path)
-    save_result({**row, "strategy": "smote", "sampling_ratio": 0.5, "pr_auc": 0.9}, path)
+    smote_05 = {
+        **row,
+        "config_id": "logreg__smote__0.5__x",
+        "strategy": "smote",
+        "sampling_ratio": 0.5,
+    }
+    smote_01 = {
+        **row,
+        "config_id": "logreg__smote__0.1__x",
+        "strategy": "smote",
+        "sampling_ratio": 0.1,
+    }
+    save_result(smote_05, path)
+    save_result(smote_01, path)
+    save_result({**smote_05, "pr_auc": 0.9}, path)
     saved = pd.read_csv(path)
     assert len(saved) == 3
     assert sorted(saved["strategy"]) == ["none", "smote", "smote"]

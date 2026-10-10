@@ -14,7 +14,8 @@ help:
 	@echo "test            run pytest"
 	@echo "notebook        execute the notebooks top to bottom"
 	@echo "train-baseline  train the baseline and write its row to reports/results.csv"
-	@echo "experiments, api, app: later phases"
+	@echo "experiments     run the full grid, tuning and report (resumes; about an hour from scratch)"
+	@echo "api, app: later phases"
 
 # --locked fails if uv.lock is out of date with pyproject.toml instead of silently re-resolving.
 install:
@@ -48,8 +49,10 @@ endif
 train-baseline:
 	uv run --locked python -m fraud.train --model logreg --strategy none
 
+# Full grid, tuning and report. Finished configurations are skipped, so it can be resumed.
+# Subset: uv run python -m fraud.experiments --stage grid --model lightgbm --strategy smote
 experiments:
-	@echo "experiments: not implemented yet (Phase 3)"
+	uv run --locked python -m fraud.experiments
 
 api:
 	@echo "api: not implemented yet (Phase 5)"

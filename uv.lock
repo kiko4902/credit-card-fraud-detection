@@ -605,6 +605,7 @@ source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
     { name = "imbalanced-learn" },
+    { name = "joblib" },
     { name = "kaggle" },
     { name = "lightgbm" },
     { name = "matplotlib" },
@@ -635,6 +636,7 @@ dev = [
 requires-dist = [
     { name = "fastapi", specifier = ">=0.143.0" },
     { name = "imbalanced-learn", specifier = ">=0.14.2" },
+    { name = "joblib", specifier = ">=1.6.0" },
     { name = "kaggle", specifier = ">=2.2.4" },
     { name = "lightgbm", specifier = ">=4.7.0" },
     { name = "matplotlib", specifier = ">=3.11.2" },
