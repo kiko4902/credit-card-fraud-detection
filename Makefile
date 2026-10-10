@@ -13,7 +13,8 @@ help:
 	@echo "format          ruff autofix + format"
 	@echo "test            run pytest"
 	@echo "notebook        execute the notebooks top to bottom"
-	@echo "train-baseline, experiments, api, app: later phases"
+	@echo "train-baseline  train the baseline and write its row to reports/results.csv"
+	@echo "experiments, api, app: later phases"
 
 # --locked fails if uv.lock is out of date with pyproject.toml instead of silently re-resolving.
 install:
@@ -43,8 +44,9 @@ else
 	uv run --locked jupyter nbconvert --to notebook --execute --inplace $(NOTEBOOKS)
 endif
 
+# Logistic regression, no resampling: fit on train, evaluate on validation.
 train-baseline:
-	@echo "train-baseline: not implemented yet (Phase 2)"
+	uv run --locked python -m fraud.train --model logreg --strategy none
 
 experiments:
 	@echo "experiments: not implemented yet (Phase 3)"

@@ -1,5 +1,7 @@
+import numpy as np
 import pandas as pd
 import pytest
+from sklearn.base import clone
 
 from fraud import features
 from fraud.config import PCA_COLUMNS
@@ -41,3 +43,50 @@ def test_class_separation_is_direction_agnostic(transactions: pd.DataFrame) -> N
     mirrored = features.class_separation(flipped, ["V1"])
     assert mirrored.loc["V1", "separation"] == pytest.approx(original.loc["V1", "separation"])
     assert mirrored.loc["V1", "auc"] == pytest.approx(1 - original.loc["V1", "auc"])
+
+
+def test_fraud_features_output_columns(transactions: pd.DataFrame) -> None:
+    raw = transactions.drop(columns=["Class"])
+    out = features.FraudFeatures().fit_transform(raw)
+    assert list(out.columns) == features.MODEL_FEATURES
+    assert list(out.columns) == [*PCA_COLUMNS, "log_amount", "hour_sin", "hour_cos"]
+    assert "Time" not in out.columns
+    assert "Amount" not in out.columns
+    assert len(out) == len(raw)
+    assert out.index.equals(raw.index)
+    pd.testing.assert_frame_equal(out[PCA_COLUMNS], raw[PCA_COLUMNS])
+
+
+def test_fraud_features_values() -> None:
+    raw = pd.DataFrame(0.0, index=range(4), columns=features.RAW_FEATURES)
+    raw["Time"] = [0.0, 6 * 3600.0, 12 * 3600.0, 24 * 3600.0 + 6 * 3600.0]
+    raw["Amount"] = [0.0, np.e - 1, 99.0, 9.0]
+    out = features.FraudFeatures().fit_transform(raw)
+    assert out["log_amount"].tolist() == pytest.approx([0.0, 1.0, np.log(100.0), np.log(10.0)])
+    assert out["hour_sin"].tolist() == pytest.approx([0.0, 1.0, 0.0, 1.0], abs=1e-12)
+    assert out["hour_cos"].tolist() == pytest.approx([1.0, 0.0, -1.0, 0.0], abs=1e-12)
+
+
+def test_fraud_features_treat_midnight_as_continuous() -> None:
+    raw = pd.DataFrame(0.0, index=range(2), columns=features.RAW_FEATURES)
+    raw["Time"] = [86_400.0 - 1, 86_400.0 + 1]  # one second before and after midnight
+    out = features.FraudFeatures().fit_transform(raw)
+    assert abs(out["hour_sin"].diff().iloc[1]) < 1e-3
+    assert abs(out["hour_cos"].diff().iloc[1]) < 1e-3
+
+
+def test_fraud_features_ignore_extra_columns_and_do_not_mutate(transactions: pd.DataFrame) -> None:
+    before = transactions.copy()
+    out = features.FraudFeatures().fit_transform(transactions)  # includes Class
+    assert "Class" not in out.columns
+    pd.testing.assert_frame_equal(transactions, before)
+
+
+def test_fraud_features_require_raw_columns(transactions: pd.DataFrame) -> None:
+    with pytest.raises(ValueError, match="Amount"):
+        features.FraudFeatures().fit(transactions.drop(columns=["Amount"]))
+
+
+def test_fraud_features_is_a_cloneable_sklearn_transformer(transactions: pd.DataFrame) -> None:
+    transformer = clone(features.FraudFeatures()).fit(transactions)
+    assert list(transformer.get_feature_names_out()) == features.MODEL_FEATURES

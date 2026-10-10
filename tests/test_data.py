@@ -152,3 +152,94 @@ def test_split_summary_counts(transactions: pd.DataFrame) -> None:
     assert summary["fraud"].sum() == transactions[TARGET_COLUMN].sum()
     assert summary["share"].sum() == pytest.approx(1.0)
     assert (summary["time_start"] <= summary["time_end"]).all()
+
+
+def test_drop_exact_duplicates_removes_exact_copies_only(with_duplicates: pd.DataFrame) -> None:
+    deduplicated = data.drop_exact_duplicates(with_duplicates)
+    # The 3 exact copies go; the 2 rows that repeat at a different Time stay.
+    assert len(deduplicated) == N_ROWS + 2
+    assert data.duplicate_mask(deduplicated).sum() == 0
+    assert data.duplicate_mask(deduplicated, ignore=["Time"]).sum() == 2
+    pd.testing.assert_frame_equal(deduplicated.iloc[:N_ROWS], with_duplicates.iloc[:N_ROWS])
+
+
+@pytest.fixture
+def raw_csv(with_duplicates: pd.DataFrame, tmp_path: Path) -> Path:
+    """A stand-in for creditcard.csv: synthetic rows in shuffled order, with duplicates."""
+    path = tmp_path / "creditcard.csv"
+    with_duplicates.sample(frac=1.0, random_state=0).to_csv(path, index=False)
+    return path
+
+
+def test_load_train_val_is_deduplicated_ordered_and_disjoint(raw_csv: Path) -> None:
+    train, val = data.load_train_val(raw_csv, expected_rows=None)
+    assert train["Time"].is_monotonic_increasing
+    assert val["Time"].is_monotonic_increasing
+    assert train["Time"].max() < val["Time"].min()
+    assert not set(train.index) & set(val.index)
+    assert data.duplicate_mask(pd.concat([train, val])).sum() == 0
+
+
+def test_load_train_val_returns_only_two_splits(raw_csv: Path) -> None:
+    splits = data.load_train_val(raw_csv, expected_rows=None)
+    assert len(splits) == 2
+    train, val = splits
+    # Together they hold about 85 % of the rows: the test part is not handed out.
+    assert len(train) + len(val) == pytest.approx(0.85 * (N_ROWS + 2), abs=0.01 * N_ROWS)
+
+
+def test_test_split_requires_explicit_permission(raw_csv: Path) -> None:
+    with pytest.raises(data.HeldOutTestSetError, match="allow_test=True"):
+        data.load_test(path=raw_csv, expected_rows=None)
+    with pytest.raises(data.HeldOutTestSetError):
+        data.load_test(allow_test=False, path=raw_csv, expected_rows=None)
+    with pytest.raises(data.HeldOutTestSetError):
+        data.load_test(allow_test="yes", path=raw_csv, expected_rows=None)  # type: ignore[arg-type]
+    with pytest.raises(TypeError):
+        data.load_test(True, path=raw_csv, expected_rows=None)  # type: ignore[misc]
+
+
+def test_test_split_follows_validation_in_time(raw_csv: Path) -> None:
+    _, val = data.load_train_val(raw_csv, expected_rows=None)
+    test = data.load_test(allow_test=True, path=raw_csv, expected_rows=None)
+    assert val["Time"].max() < test["Time"].min()
+    assert not set(val.index) & set(test.index)
+
+
+def test_split_xy_removes_only_the_target(transactions: pd.DataFrame) -> None:
+    features, target = data.split_xy(transactions)
+    assert list(features.columns) == EXPECTED_COLUMNS[:-1]
+    assert target.name == TARGET_COLUMN
+    assert len(features) == len(target) == N_ROWS
+
+
+def test_time_ordered_folds_never_validate_on_the_past(transactions: pd.DataFrame) -> None:
+    folds = data.time_ordered_folds(transactions, n_splits=3, min_fraud=1)
+    assert len(folds) == 3
+    previous_train_size = 0
+    for train_idx, val_idx in folds:
+        assert train_idx.max() < val_idx.min()
+        train_time = transactions["Time"].iloc[train_idx]
+        assert train_time.max() <= transactions["Time"].iloc[val_idx].min()
+        assert len(train_idx) > previous_train_size  # expanding window
+        previous_train_size = len(train_idx)
+
+
+def test_time_ordered_folds_reject_unsorted_data(transactions: pd.DataFrame) -> None:
+    with pytest.raises(ValueError, match="sorted"):
+        data.time_ordered_folds(transactions.sample(frac=1.0, random_state=0), min_fraud=1)
+
+
+def test_time_ordered_folds_require_enough_fraud(transactions: pd.DataFrame) -> None:
+    with pytest.raises(ValueError, match="fraud cases"):
+        data.time_ordered_folds(transactions, n_splits=3, min_fraud=N_ROWS)
+
+
+def test_fold_summary_reports_fraud_per_fold(transactions: pd.DataFrame) -> None:
+    folds = data.time_ordered_folds(transactions, n_splits=3, min_fraud=1)
+    summary = data.fold_summary(transactions, folds)
+    assert list(summary.index) == [1, 2, 3]
+    for (train_idx, val_idx), (_, row) in zip(folds, summary.iterrows(), strict=True):
+        assert row["train_rows"] == len(train_idx)
+        assert row["val_fraud"] == transactions[TARGET_COLUMN].iloc[val_idx].sum()
+    assert (summary["val_fraud"] >= 1).all()

@@ -34,9 +34,19 @@ EXPECTED_ROWS: int = 284_807
 # A caught fraud (TP) also incurs the review cost.
 # A correctly passed legitimate transaction (TN) costs nothing.
 REVIEW_COST_EUR: float = 5.0
-FN_COST_IS_AMOUNT: bool = True
 
 # --- Time-based split (PLAN.md section 5) -------------------------------------
 # Earliest 70 % of transactions for training, next 15 % validation, last 15 % test.
 TRAIN_FRAC: float = 0.70
 VAL_FRAC: float = 0.15
+
+# --- Cross-validation inside the training split -------------------------------
+# Time-ordered expanding-window folds. With 3 splits every validation fold of the real
+# training data holds at least 56 fraud cases; 4 or more splits leave a fold with under 30.
+CV_N_SPLITS: int = 3
+MIN_FRAUD_PER_FOLD: int = 30
+
+# --- Evaluation ---------------------------------------------------------------
+DEFAULT_THRESHOLD: float = 0.5
+N_BOOTSTRAP: int = 1000
+CONFIDENCE_LEVEL: float = 0.95

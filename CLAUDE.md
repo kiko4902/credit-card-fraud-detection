@@ -20,7 +20,7 @@ phase; do not start a later phase until the current one meets its "Done when" cr
 ```
 docs/PLAN.md          project plan            docs/images/     README images
 data/raw|processed/   gitignored              notebooks/       01_eda.ipynb (Phase 1)
-src/fraud/            config, data, features, plotting (+ models, evaluate, train, explain later)
+src/fraud/            config, data, features, models, evaluate, train, plotting (+ explain later)
 models/               final model artifact    reports/         results.csv, figures/
 app/                  api.py, streamlit_app.py
 tests/                pytest, synthetic fixtures in conftest.py
@@ -34,7 +34,8 @@ tests/                pytest, synthetic fixtures in conftest.py
   come from `fraud.config`, never hard-coded.
 - **No data leakage.** Resampling and scaling only inside an `imblearn.pipeline.Pipeline`,
   fit on training data only. Splits are time-based (no shuffling across time). The test set
-  is used once, at the end.
+  is used once, at the end: modelling code loads data with `load_train_val()`; the test split
+  only via `load_test(allow_test=True)` in Phase 4. Raw `Time` is never a model feature.
 - Primary metric is PR-AUC; never report accuracy as a headline number.
 - English for code, comments, docs and commit messages. Plain commit messages, no
   attribution lines (`.claude/settings.json` disables them; keep it that way).
@@ -65,13 +66,14 @@ importing it triggers authentication.
 | `make lint` / `make format` | ruff check + format check / autofix |
 | `make test` | pytest |
 | `make notebook` | execute notebooks in place, outputs kept (needs data; never run in CI) |
-| `make train-baseline`, `experiments`, `api`, `app` | not implemented yet |
+| `make train-baseline` | logistic regression, no resampling; upserts its row in `reports/results.csv` |
+| `make experiments`, `api`, `app` | not implemented yet |
 
 ## Current status
 
 - [x] Phase 0 – Setup
-- [ ] Phase 1 – EDA (in progress)
-- [ ] Phase 2 – Training and evaluation pipeline
+- [x] Phase 1 – EDA
+- [ ] Phase 2 – Training and evaluation pipeline (in progress)
 - [ ] Phase 3 – Experiments
 - [ ] Phase 4 – Threshold and explainability
 - [ ] Phase 5 – API, app, Docker

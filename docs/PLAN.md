@@ -163,3 +163,25 @@ FastAPI, Streamlit app, Dockerfile, tests for the API.
 ### Phase 6 – CI, deployment, documentation
 GitHub Actions (lint + tests), deploy Streamlit app, final README.
 **Done when:** CI is green, the app is reachable via a public link, README is complete.
+
+## 13. Design decisions
+
+Decisions taken after the EDA (`notebooks/01_eda.ipynb`). They override earlier sections
+where they differ.
+
+1. **Duplicates.** The 1,081 exact duplicates (identical in all 31 columns, 19 of them fraud)
+   are dropped once, before splitting. Rows that repeat only at a different `Time` are kept:
+   they are distinct transactions. In Phase 4 the test metrics are reported both with and
+   without deduplication.
+2. **Primary evaluation is the 70/15/15 time-based split**, because it simulates predicting
+   the future. Known limitation: validation and test cover only the afternoon and evening of
+   day 2 and contain no night hours, where the fraud rate is highest. This is documented in
+   the README. In Phase 4 a clearly labelled **secondary** evaluation on a stratified random
+   split of the deduplicated data is added, for comparison only.
+3. **Raw `Time` is never a model feature.** It only encodes the position in the recording and
+   is out of the training range in validation and test. The derived hour of day is used
+   instead.
+4. **Cross-validation inside the training split is time-ordered** (expanding window), never
+   shuffled k-fold, and every validation fold must contain a minimum number of fraud cases.
+5. **The test split is loaded only through `fraud.data.load_test(allow_test=True)`** and only
+   in Phase 4.
