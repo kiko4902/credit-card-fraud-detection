@@ -58,8 +58,7 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 
 | Command | What it does |
 |---|---|
-| `make install` | `uv sync --locked`; fails if `pyproject.toml` and `uv.lock` disagree |
-| `make lock` | upgrade dependencies and rewrite `uv.lock` |
+| `make install` / `lock` | `uv sync --locked` (fails if `uv.lock` is out of date) / upgrade and rewrite `uv.lock` |
 | `make data` | download the dataset into `data/raw/` (skipped if present) and validate it |
 | `make lint` / `format` / `test` | ruff check + format check / ruff autofix / pytest |
 | `make notebook` | execute notebooks in place, outputs kept (needs data; never run in CI) |
