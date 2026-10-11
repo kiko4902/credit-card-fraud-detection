@@ -9,10 +9,11 @@ jobs:
   lint-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        # setup-uv publishes no floating major tags since v8, so the full version is pinned.
+        uses: astral-sh/setup-uv@v10.3.0
         with:
           # Same version as in the Dockerfile; keeps `uv export` output stable.
           version: "0.12.5"

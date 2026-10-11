@@ -190,9 +190,16 @@ original papers (Bunkhumpornpat et al. 2009; Gazzah and Amara 2008).
 
 ## Motivation: MSc thesis
 
-The project extends my MSc thesis on SMOTE-based methods for class imbalance, which
-compared oversampling methods on 18 datasets with 8 classifiers and imbalance ratios up to
-28:1. This dataset is far more extreme, at about 540:1. Two thesis findings were tested:
+The project extends my MSc thesis:
+
+> Kristian Džoić, *Analiza algoritama zasnovanih na SMOTE za rukovanje problemom
+> neuravnoteženosti klasa* (Analysis of SMOTE-based algorithms for handling class
+> imbalance), MSc thesis, Faculty of Electrical Engineering, Computer Science and
+> Information Technology Osijek (FERIT), 2026.
+
+The thesis compared oversampling methods on 18 datasets with 8 classifiers and imbalance
+ratios up to 28:1. This dataset is far more extreme, at about 540:1. Two thesis findings
+were tested:
 
 - **Oversampling barely changes PR-AUC on average and mainly shifts the decision
   boundary.** Supported here against class weights: the ranking is the same, and the cost
