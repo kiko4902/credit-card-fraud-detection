@@ -14,6 +14,8 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v6
         with:
+          # Same version as in the Dockerfile; keeps `uv export` output stable.
+          version: "0.12.5"
           enable-cache: true
 
       - name: Install dependencies
@@ -21,6 +23,9 @@ jobs:
 
       - name: Lint
         run: make lint
+
+      - name: Deployment requirements match uv.lock
+        run: make check-app-requirements
 
       # Tests use synthetic fixtures only; no Kaggle credentials or real data needed.
       - name: Test

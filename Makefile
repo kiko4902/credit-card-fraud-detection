@@ -4,9 +4,11 @@
 NOTEBOOKS := $(wildcard notebooks/*.ipynb)
 
 IMAGE ?= fraud-api
+APP_REQUIREMENTS := app/requirements.txt
 PORT ?= 8000
 
-.PHONY: help install lock data lint format test notebook train-baseline experiments evaluate \n	app-data api app docker-build docker-run
+.PHONY: help install lock data lint format test notebook train-baseline experiments evaluate \
+	app-data app-requirements check-app-requirements api app docker-build docker-run
 
 help:
 	@echo "install         install dependencies exactly as pinned in uv.lock"
@@ -20,6 +22,7 @@ help:
 	@echo "experiments     run experiment stages 1-3 and the report (finished runs are skipped)"
 	@echo "evaluate        final evaluation: threshold, TEST SPLIT (logged), SHAP, report"
 	@echo "app-data        export the validation scores used by the app (needs the dataset)"
+	@echo "app-requirements  rewrite app/requirements.txt (hosted app) from uv.lock"
 	@echo "api             run the FastAPI service on http://127.0.0.1:$(PORT) (docs at /docs)"
 	@echo "app             run the Streamlit app on http://localhost:8501"
 	@echo "docker-build    build the API image ($(IMAGE))"
@@ -73,6 +76,18 @@ evaluate:
 # Validation scores for the threshold page of the app (score, label, amount only).
 app-data:
 	uv run --locked python -m fraud.app_data
+
+# Requirements of the hosted Streamlit app: runtime dependencies + the "app" group, pinned
+# as in uv.lock. Streamlit Community Cloud reads the file next to the entrypoint. The
+# project itself is not listed; the app adds src/ to the import path.
+app-requirements:
+	@echo "# Generated from uv.lock by 'make app-requirements'. Do not edit." > $(APP_REQUIREMENTS)
+	uv export --locked --no-default-groups --group app --no-emit-project --no-hashes \
+		--no-header >> $(APP_REQUIREMENTS)
+
+# Fails when app/requirements.txt no longer matches uv.lock (run in CI).
+check-app-requirements: app-requirements
+	git diff --exit-code -- $(APP_REQUIREMENTS)
 
 api:
 	uv run --locked uvicorn app.api:app --host 127.0.0.1 --port $(PORT)

@@ -42,7 +42,7 @@ tests/                pytest, synthetic fixtures     .github/workflows/ci.yml  l
   attribution lines (`.claude/settings.json` disables them; keep it that way).
 - Gitignored: `data/`, `mlruns/`, `models/*` except the final pipeline and its config.
 - LF line endings (`.gitattributes`). The Makefile must work in Git Bash on Windows and on
-  the Linux CI runner: no PowerShell/cmd syntax, no OS-specific paths.
+  Linux CI: no PowerShell/cmd syntax, no OS-specific paths. Linux installs `xgboost-cpu`.
 - Never run destructive commands (`rm -rf` on data, git history rewrites, deleting files
   outside the project) without asking first.
 - Kaggle token lives in `~/.kaggle/` (or `KAGGLE_API_TOKEN`). Never print, copy or commit it.
@@ -67,7 +67,8 @@ seed). Import `kaggle` only lazily inside functions: importing it triggers authe
 | `make experiments` | stages 1-3 + report, resumable (design: PLAN.md §6, rule: §14) |
 | `make evaluate` | Phase 4: threshold, the one test-set evaluation (logged), SHAP, report |
 | `make api` / `app` | FastAPI on :8000 / Streamlit on :8501; both use `fraud.serving` |
-| `make docker-build` / `docker-run` | API image (`compose.yaml` adds the app); `make app-data` re-exports app data |
+| `make docker-build` / `docker-run` | API image (`compose.yaml` adds the app) |
+| `make app-data` / `app-requirements` | re-export app data / rewrite `app/requirements.txt` (Streamlit Cloud) from `uv.lock`, checked in CI |
 
 ## Current status
 

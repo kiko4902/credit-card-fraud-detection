@@ -14,6 +14,7 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import xgboost
 from matplotlib.colors import LinearSegmentedColormap
 from matplotlib.lines import Line2D
 from sklearn.metrics import average_precision_score, precision_recall_curve
@@ -689,11 +690,12 @@ def save_final_model(
                     "scikit-learn",
                     "imbalanced-learn",
                     "lightgbm",
-                    "xgboost",
                     "pandas",
                     "numpy",
                 )
             },
+            # Not from the package metadata: the distribution is "xgboost-cpu" on Linux.
+            "xgboost": xgboost.__version__,
         },
         "model_file": FINAL_MODEL_NAME,
         "model_file_bytes": model_path.stat().st_size,
