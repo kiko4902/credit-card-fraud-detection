@@ -147,9 +147,15 @@ def score_strip(score: float, threshold: float) -> alt.LayerChart:
                 scale=alt.Scale(
                     domain=["passed", "flagged for review"], range=[LEGIT_COLOR, FRAUD_COLOR]
                 ),
-                legend=alt.Legend(title=None, orient="bottom"),
+                legend=None,
             ),
         )
+    )
+    zones["middle"] = np.sqrt(zones["start"] * zones["end"])
+    names = (
+        alt.Chart(zones)
+        .mark_text(baseline="middle", fontSize=12, color=NEUTRAL_COLOR)
+        .encode(x=alt.X("middle:Q", scale=scale), y=alt.value(11), text="zone:N")
     )
     rule = (
         alt.Chart(pd.DataFrame({"x": [threshold], "label": [f"threshold {threshold:.3f}"]}))
@@ -168,7 +174,7 @@ def score_strip(score: float, threshold: float) -> alt.LayerChart:
         )
         .encode(x=alt.X("x:Q", scale=scale), tooltip=[alt.Tooltip("score:Q", format=".5f")])
     )
-    return (background + rule + point).properties(height=110)
+    return (background + names + rule + point).properties(height=140)
 
 
 def contribution_chart(contributions: pd.DataFrame) -> alt.Chart:
@@ -180,7 +186,12 @@ def contribution_chart(contributions: pd.DataFrame) -> alt.Chart:
             x=alt.X(
                 "contribution:Q", title="Contribution to the fraud score (SHAP value, log-odds)"
             ),
-            y=alt.Y("feature:N", sort=None, title=None, axis=alt.Axis(labelLimit=260)),
+            y=alt.Y(
+                "feature:N",
+                sort=None,
+                title=None,
+                axis=alt.Axis(labelLimit=260, labelOverlap=False),
+            ),
             color=alt.Color(
                 "direction:N",
                 scale=alt.Scale(
@@ -195,7 +206,7 @@ def contribution_chart(contributions: pd.DataFrame) -> alt.Chart:
                 alt.Tooltip("contribution:Q", format="+.3f"),
             ],
         )
-        .properties(height=max(200, 30 * len(contributions)))
+        .properties(height=120 + 30 * len(contributions))
     )
 
 
@@ -388,11 +399,12 @@ def page_threshold() -> None:
 
     now = Decisions(y_true, scores, amount, threshold, review_cost).metrics()
     chosen = Decisions(y_true, scores, amount, selected, review_cost).metrics()
+    extra_cost = now["cost"] - chosen["cost"]
     first, second, third, fourth = st.columns(4)
     first.metric(
         "Total cost",
         eur(now["cost"]),
-        delta=f"{now['cost'] - chosen['cost']:+,.0f} € vs selected",
+        delta=f"{extra_cost:+,.0f} € vs selected" if round(extra_cost) else None,
         delta_color="inverse",
         help=f"Flagging nothing would cost {eur(now['cost_no_model'])}.",
     )
